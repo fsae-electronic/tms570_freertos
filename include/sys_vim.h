@@ -91,7 +91,10 @@ typedef enum systemInterrupt
 extern void esmHighInterrupt(void);
 extern void phantomInterrupt(void);
 extern void vPortPreemptiveTick(void);
+extern void can1HighLevelInterrupt(void);
 extern void vPortYeildWithinAPI(void);
+extern void can2HighLevelInterrupt(void);
+extern void sciHighLevelInterrupt(void);
 
 /* USER CODE BEGIN (3) */
 /* USER CODE END */
@@ -272,7 +275,7 @@ typedef struct vim_config_reg
                                     | (uint32)((uint32)0U << 13U)\
                                     | (uint32)((uint32)0U << 14U)\
                                     | (uint32)((uint32)0U << 15U)\
-                                    | (uint32)((uint32)0U << 16U)\
+                                    | (uint32)((uint32)1U << 16U)\
                                     | (uint32)((uint32)0U << 17U)\
                                     | (uint32)((uint32)0U << 18U)\
                                     | (uint32)((uint32)0U << 19U)\
@@ -292,7 +295,7 @@ typedef struct vim_config_reg
 #define VIM_REQMASKSET1_CONFIGVALUE	( (uint32)((uint32)0U << 0U)\
                                     | (uint32)((uint32)0U << 1U)\
                                     | (uint32)((uint32)0U << 2U)\
-                                    | (uint32)((uint32)0U << 3U)\
+                                    | (uint32)((uint32)1U << 3U)\
                                     | (uint32)((uint32)0U << 4U)\
                                     | (uint32)((uint32)0U << 5U)\
                                     | (uint32)((uint32)0U << 6U)\
@@ -322,7 +325,7 @@ typedef struct vim_config_reg
                                     | (uint32)((uint32)0U << 30U)\
                                     | (uint32)((uint32)0U << 31U))
 						
-#define VIM_REQMASKSET2_CONFIGVALUE	( (uint32)((uint32)0U << 0U)\
+#define VIM_REQMASKSET2_CONFIGVALUE	( (uint32)((uint32)1U << 0U)\
                                     | (uint32)((uint32)0U << 1U)\
                                     | (uint32)((uint32)0U << 2U)\
                                     | (uint32)((uint32)0U << 3U)\

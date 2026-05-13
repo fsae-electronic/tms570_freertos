@@ -95,10 +95,10 @@
 #define configUSE_FPU							1
 #define configUSE_IDLE_HOOK			  0
 #define configUSE_TICK_HOOK			  0
-#define configUSE_TRACE_FACILITY	  0
+#define configUSE_TRACE_FACILITY	  1
 #define configUSE_16_BIT_TICKS		  0
 #define configCPU_CLOCK_HZ			  ( ( unsigned portLONG ) 80000000 ) /* Timer clock. */
-#define configTICK_RATE_HZ			  ( ( TickType_t ) 1000 )
+#define configTICK_RATE_HZ			  ( ( TickType_t ) 100000 )
 #define configMAX_PRIORITIES		  ( 9 )
 #define configMINIMAL_STACK_SIZE	  ( ( unsigned portSHORT ) 128 )
 #define configTOTAL_HEAP_SIZE		  ( ( size_t ) 8192 )
@@ -118,7 +118,7 @@
 
 /* USER CODE BEGIN (2) */
 #undef configSUPPORT_STATIC_ALLOCATION
-#define configSUPPORT_STATIC_ALLOCATION 1
+#define configSUPPORT_STATIC_ALLOCATION         1
 /* USER CODE END */
 
 /* Co-routine definitions. */
@@ -126,7 +126,7 @@
 #define configMAX_CO_ROUTINE_PRIORITIES ( 2 )
 
 /* Mutexes */
-#define configUSE_MUTEXES               0
+#define configUSE_MUTEXES               1
 #define configUSE_RECURSIVE_MUTEXES     0
 
 /* Semaphores */
@@ -158,6 +158,7 @@
 #define INCLUDE_xTaskGetIdleTaskHandle      1
 
 /* USER CODE BEGIN (4) */
+#define INCLUDE_xTimerPendFunctionCall      1
 /* USER CODE END */
 
 

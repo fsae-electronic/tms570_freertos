@@ -1,45 +1,46 @@
-/** @file sys_main.c
- *   @brief Application main file
- *   @date 11-Dec-2018
- *   @version 04.07.01
- *
- *   This file contains an empty main function,
- *   which can be used for the application.
- */
+/** @file sys_main.c 
+*   @brief Application main file
+*   @date 11-Dec-2018
+*   @version 04.07.01
+*
+*   This file contains an empty main function,
+*   which can be used for the application.
+*/
 
-/*
- * Copyright (C) 2009-2018 Texas Instruments Incorporated - www.ti.com
- *
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted provided that the following conditions
- *  are met:
- *
- *    Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- *    Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the
- *    distribution.
- *
- *    Neither the name of Texas Instruments Incorporated nor the names of
- *    its contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- *  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- *  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- *  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- *  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- *  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- *  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- *  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- *  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- *  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- *  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- */
+/* 
+* Copyright (C) 2009-2018 Texas Instruments Incorporated - www.ti.com 
+* 
+* 
+*  Redistribution and use in source and binary forms, with or without 
+*  modification, are permitted provided that the following conditions 
+*  are met:
+*
+*    Redistributions of source code must retain the above copyright 
+*    notice, this list of conditions and the following disclaimer.
+*
+*    Redistributions in binary form must reproduce the above copyright
+*    notice, this list of conditions and the following disclaimer in the 
+*    documentation and/or other materials provided with the   
+*    distribution.
+*
+*    Neither the name of Texas Instruments Incorporated nor the names of
+*    its contributors may be used to endorse or promote products derived
+*    from this software without specific prior written permission.
+*
+*  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+*  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+*  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+*  A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+*  OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+*  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+*  LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+*  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+*  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+*  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+*  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*
+*/
+
 
 /* USER CODE BEGIN (0) */
 
@@ -346,8 +347,8 @@ static portTASK_FUNCTION_PROTO(vMotorFSMTask, pvParameters);
  * @param pul_TaskStackSize Pointer to receive the stack size in words
  */
 void vApplicationGetIdleTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
-                                    StackType_t **ppxTimerTaskStackBuffer,
-                                    uint32_t *pulTimerTaskStackSize);
+                                   StackType_t **ppxTimerTaskStackBuffer,
+                                   uint32_t *pulTimerTaskStackSize);
 void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
                                     StackType_t **ppxTimerTaskStackBuffer,
                                     uint32_t *pulTimerTaskStackSize);
@@ -374,19 +375,19 @@ static AppContext_t xAppContext = {
 /* USER CODE END */
 
 /** @fn void main(void)
- *   @brief Application main function
- *   @note This function is empty by default.
- *
- *   This function is called after startup.
- *   The user can use this function to implement the application.
- */
+*   @brief Application main function
+*   @note This function is empty by default.
+*
+*   This function is called after startup.
+*   The user can use this function to implement the application.
+*/
 
 /* USER CODE BEGIN (2) */
 /* USER CODE END */
 
 int main(void)
 {
-    /* USER CODE BEGIN (3) */
+/* USER CODE BEGIN (3) */
 
     /* Interrupts should be off here, to ensure a tick does not occur before or during
      * the call to vTaskStartScheduler(). The stacks of the created tasks contain a
@@ -410,8 +411,9 @@ int main(void)
 
     /* USER CODE END */
 
-    // return 0;
+    return 0;
 }
+
 
 /* USER CODE BEGIN (4) */
 
@@ -498,10 +500,13 @@ void canMessageNotification(canBASE_t *node, uint32 messageBox)
 void sciNotification(sciBASE_t *sci, uint32 flags)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    uint8_t c;
+    uint8_t c = 0;
 
     /* Telemetry and Command RX tasks currently both use the same queue. A dispatcher or
-     * eparate queues should be added if processing differs significantly. */
+     * separate queues should be added if processing differs significantly. If the
+     * length of the received frames is variable, sciReceiveByte would be preferred.
+     * sciReceive is suitable as long as the "Length" field (third frame byte) is used.
+     */
 
     // TODO: Dispatch SCI msgs separately.
     if ((sci == SCI_REG) && (xAppHandles.uartTxQ != NULL) && (xAppHandles.uartRxQ != NULL))
@@ -510,12 +515,12 @@ void sciNotification(sciBASE_t *sci, uint32 flags)
         {
             if (xQueueReceiveFromISR(xAppHandles.uartTxQ, &c, &xHigherPriorityTaskWoken) == pdTRUE)
             {
-                sciSendByte(sci, c);
+                sciSend(sci, sizeof(uint8_t), &c); // TODO: Update to send frames or use a dedicated command queue.
             }
         }
         else if ((flags & SCI_RX_INT) != 0U)
         {
-            c = (uint8_t)sciReceiveByte(sci);
+            sciReceive(sci, sizeof(uint8_t), &c); // TODO: Update to receive frames or use a dedicated command queue.
             if (xQueueSendFromISR(xAppHandles.uartRxQ, &c, &xHigherPriorityTaskWoken) == pdFAIL)
             {
                 /* Queue full, byte lost. Set an event bit or counter. */
@@ -546,7 +551,8 @@ static void vInitModules(void)
     canEnableStatusChangeNotification(CAN_DRIVERS_REG);
     canEnableErrorNotification(CAN_SENSORS_REG);
     canEnableStatusChangeNotification(CAN_SENSORS_REG);
-    sciEnableNotification(SCI_REG, (uint32)(SCI_TX_INT | SCI_RX_INT /* | SCI_... */));
+    // sciEnableNotification(SCI_REG, (uint32)(SCI_TX_INT | SCI_RX_INT /* | SCI_... */));
+    sciEnableNotification(SCI_REG, (uint32_t)0); // Interrupts enabled in HALCoGen
 
     // Add other peripheral initializations as needed.
 }

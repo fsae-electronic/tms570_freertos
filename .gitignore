@@ -1,0 +1,12 @@
+# Build outputs
+Debug/
+
+
+# IDE / editor files
+.settings/
+.theia/
+.vscode/
+.ccsproject
+.clangd
+.cproject
+.project
