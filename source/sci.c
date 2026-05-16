@@ -90,9 +90,9 @@ void sciInit(void)
     sciREG->GCR1 =  (uint32)((uint32)1U << 25U)  /* enable transmit */
                   | (uint32)((uint32)1U << 24U)  /* enable receive */
                   | (uint32)((uint32)1U << 5U)   /* internal clock (device has no clock pin) */
-                  | (uint32)((uint32)(2U-1U) << 4U)  /* number of stop bits */
-                  | (uint32)((uint32)1U << 3U)  /* even parity, otherwise odd */
-                  | (uint32)((uint32)1U << 2U)  /* enable parity */
+                  | (uint32)((uint32)(1U-1U) << 4U)  /* number of stop bits */
+                  | (uint32)((uint32)0U << 3U)  /* even parity, otherwise odd */
+                  | (uint32)((uint32)0U << 2U)  /* enable parity */
                   | (uint32)((uint32)1U << 1U);  /* asynchronous timing mode */
 
     /** - set baudrate */
@@ -143,7 +143,7 @@ void sciInit(void)
                    | (uint32)((uint32)0U << 0U);  /* Break detect */
 
     /** - initialize global transfer variables */
-    g_sciTransfer_t[0U].mode   = (uint32)1U << 8U;
+    g_sciTransfer_t[0U].mode   = (uint32)0U << 8U;
     g_sciTransfer_t[0U].tx_length = 0U;
 	g_sciTransfer_t[0U].rx_length = 0U;
 
