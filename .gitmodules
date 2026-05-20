@@ -1,0 +1,13 @@
+[submodule "cobs/cobs-c"]
+	path = cobs/cobs-c
+	url = https://github.com/cmcqueen/cobs-c.git
+[submodule "cobs/nanocobs"]
+	path = cobs/nanocobs
+	url = https://github.com/charlesnicholson/nanocobs.git
+[submodule "msgpack/msgpack-c"]
+	path = msgpack/msgpack-c
+	url = https://github.com/msgpack/msgpack-c.git
+	branch = c_master
+[submodule "msgpack/cmp"]
+	path = msgpack/cmp
+	url = https://github.com/camgunz/cmp.git
