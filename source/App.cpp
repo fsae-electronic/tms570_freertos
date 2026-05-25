@@ -33,17 +33,15 @@ extern "C"
 #include "spi.h"
 #include "ti_fee.h"
 
+/* Application includes */
+#include "cobs/cobs.h"
+#include "msgpack/msgpack.h"
+#include "xbee/xbee.h"
+
 #ifdef __cplusplus
 }
 #endif
 
-/* RTI is blocked by default (this FreeRTOS port uses RTI Counter 0 Compare 0 to
- * generate the system tick). In order to use it, rti.c has to be created and modified
- * directly so that there is no conflict with prvSetupTimerInterrupt(). Periodic events
- * could also be generated using software timers (see vPeriodicTimerCallback).
- */
-
-/* Application includes */
 #include "Bridgetek_EVE2.hpp"
 #include "dashboard.hpp"
 #include "data.hpp"
@@ -123,14 +121,20 @@ extern "C"
 
 /* Peripheral registers */
 #define CAN_REG canREG1
-#define SPI_REG spiREG4
 #define SCI_REG sciREG
+#define SPI_REG spiREG4
 
 /* Clock and update rates */
 #define CLOCK_RTI_HZ 10000000                      // 10MHz
 #define SCREEN_UPDATE_TICKS (CLOCK_RTI_HZ / 30)    // 30Hz
 #define DATA_UPDATE_TICKS (CLOCK_RTI_HZ / 60)      // 60Hz
 #define TELEMETRY_UPDATE_TICKS (CLOCK_RTI_HZ / 50) // 50Hz
+
+/* RTI is blocked by default (this FreeRTOS port uses RTI Counter 0 Compare 0 to
+ * generate the system tick). In order to use it, rti.c has to be created and modified
+ * directly so that there is no conflict with prvSetupTimerInterrupt(). Periodic events
+ * could also be generated using software timers (see vPeriodicTimerCallback).
+ */
 
 /* RTI notifications */
 #define RTI_SCREEN_UPDATE rtiNOTIFICATION_COMPARE1
@@ -234,6 +238,51 @@ typedef struct
 } AppContext_t;
 
 /* ---------------------------------------------------------------------------------- *
+ * Function prototypes with global scope                                              *
+ * ---------------------------------------------------------------------------------- */
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+    /**
+     * @brief Initialize the application
+     * @note This function is called once at the beginning of the main program
+     */
+    void vAppInit(void);
+
+    /**
+     * @brief Run the application
+     * @note This function is called constantly in an infinite loop
+     */
+    void vAppRun(void);
+
+    /**
+     * @brief Provide static memory for the FreeRTOS idle and timer tasks
+     * @param ppx_TaskTCBBuffer Pointer to receive the TCB buffer
+     * @param ppx_TaskStackBuffer Pointer to receive the stack buffer
+     * @param pul_TaskStackSize Pointer to receive the stack size in words
+     */
+    void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
+                                       StackType_t **ppxIdleTaskStackBuffer,
+                                       uint32_t *pulIdleTaskStackSize);
+    void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
+                                        StackType_t **ppxTimerTaskStackBuffer,
+                                        uint32_t *pulTimerTaskStackSize);
+
+#ifdef __cplusplus
+}
+#endif
+
+/* ---------------------------------------------------------------------------------- *
+ * Variables with global scope                                                        *
+ * ---------------------------------------------------------------------------------- */
+
+/* Global display object */
+Bridgetek_EVE2 display_data;
+
+/* ---------------------------------------------------------------------------------- *
  * Prototypes for private functions with file level scope                             *
  * ---------------------------------------------------------------------------------- */
 
@@ -243,25 +292,25 @@ typedef struct
  * @brief Initialize peripherals and modules
  * @note Called before scheduler starts
  */
-static void vModulesInit(void);
+static void vAppInitModules(void);
 
 /**
  * @brief Initialize modules that require interrupts to be enabled
  * @note Called after scheduler starts
  */
-static void vInitModulesWithInterrupts(void);
+static void vAppInitModulesWithInterrupts(void);
 
 /**
  * @brief Create all application tasks
  * @param pxCtx Pointer to application context containing RTOS resources
  */
-static void vCreateTasks(AppContext_t *pxCtx);
+static void vAppCreateTasks(AppContext_t *pxCtx);
 
 /**
  * @brief Create all application objects
  * @param pxCtx Pointer to application context containing RTOS resources
  */
-static void vCreateObjects(AppContext_t *pxCtx);
+static void vAppCreateObjects(AppContext_t *pxCtx);
 
 // Tasks ///////////////////////////////////////////////////////////////////////////////
 
@@ -315,25 +364,25 @@ static AppContext_t xAppContext = {
     &xAppSync,
     &xAppData};
 
-/* Global display object */
-Bridgetek_EVE2 display_data;
+/* Parsed XBee API frame data */
+// static XBeeAPIParsedFrame_t xParsedFrame;
+
+/* TODO: Modify the xbee module to allow configurable addresses */
+static const uint64_t dest64 = 0x0013A20040B2B3D4; // Example 64-bit destination address
+static const uint16_t dest16 = 0xFFFE;             // Example 16-bit destination address
 
 /* ---------------------------------------------------------------------------------- *
  * Global function definitions                                                        *
  * ---------------------------------------------------------------------------------- */
 
-/**
- * @brief Initialize the application
- * @note This function is called once at the beginning of the main program
- */
 void vAppInit(void)
 {
     /* Initialize modules */
-    vModulesInit();
+    vAppInitModules();
 
     /* Create all tasks and objects */
-    vCreateTasks(&xAppContext);
-    vCreateObjects(&xAppContext);
+    vAppCreateTasks(&xAppContext);
+    vAppCreateObjects(&xAppContext);
 
     /* Interrupts should be off here, to ensure a tick does not occur before or during
      * the call to vTaskStartScheduler(). The stacks of the created tasks contain a
@@ -346,17 +395,13 @@ void vAppInit(void)
      * (see vInitTimerCallback).
      */
     // portENABLE_INTERRUPTS();
-    // vInitModulesWithInterrupts();
+    // vAppInitModulesWithInterrupts();
     // portDISABLE_INTERRUPTS();
 
     /* Start the FreeRTOS scheduler */
     vTaskStartScheduler();
 }
 
-/**
- * @brief Run the application
- * @note This function is called constantly in an infinite loop
- */
 void vAppRun(void)
 {
     /* All work done in tasks */
@@ -506,44 +551,29 @@ void sciNotification(sciBASE_t *sci, uint32 flags)
  * housekeeping and can also trigger the user's vTaskIdleHook() if it is enabled.
  */
 
-/**
- * @brief Provide static memory for the FreeRTOS idle and timer tasks
- * @param ppx_TaskTCBBuffer Pointer to receive the TCB buffer
- * @param ppx_TaskStackBuffer Pointer to receive the stack buffer
- * @param pul_TaskStackSize Pointer to receive the stack size in words
- */
-#ifdef __cplusplus
-extern "C"
+void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
+                                   StackType_t **ppxIdleTaskStackBuffer,
+                                   uint32_t *pulIdleTaskStackSize)
 {
-#endif
+    static StaticTask_t xIdleTaskTCB;
+    static StackType_t uxIdleTaskStack[configMINIMAL_STACK_SIZE];
 
-    void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
-                                       StackType_t **ppxIdleTaskStackBuffer,
-                                       uint32_t *pulIdleTaskStackSize)
-    {
-        static StaticTask_t xIdleTaskTCB;
-        static StackType_t uxIdleTaskStack[configMINIMAL_STACK_SIZE];
-
-        *ppxIdleTaskTCBBuffer = &xIdleTaskTCB;
-        *ppxIdleTaskStackBuffer = uxIdleTaskStack;
-        *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
-    }
-
-    void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
-                                        StackType_t **ppxTimerTaskStackBuffer,
-                                        uint32_t *pulTimerTaskStackSize)
-    {
-        static StaticTask_t xTimerTaskTCB;
-        static StackType_t uxTimerTaskStack[configMINIMAL_STACK_SIZE];
-
-        *ppxTimerTaskTCBBuffer = &xTimerTaskTCB;
-        *ppxTimerTaskStackBuffer = uxTimerTaskStack;
-        *pulTimerTaskStackSize = configMINIMAL_STACK_SIZE;
-    }
-
-#ifdef __cplusplus
+    *ppxIdleTaskTCBBuffer = &xIdleTaskTCB;
+    *ppxIdleTaskStackBuffer = uxIdleTaskStack;
+    *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
 }
-#endif
+
+void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
+                                    StackType_t **ppxTimerTaskStackBuffer,
+                                    uint32_t *pulTimerTaskStackSize)
+{
+    static StaticTask_t xTimerTaskTCB;
+    static StackType_t uxTimerTaskStack[configMINIMAL_STACK_SIZE];
+
+    *ppxTimerTaskTCBBuffer = &xTimerTaskTCB;
+    *ppxTimerTaskStackBuffer = uxTimerTaskStack;
+    *pulTimerTaskStackSize = configMINIMAL_STACK_SIZE;
+}
 
 /* ---------------------------------------------------------------------------------- *
  * Local function definitions                                                         *
@@ -551,7 +581,7 @@ extern "C"
 
 // Initialization //////////////////////////////////////////////////////////////////////
 
-static void vModulesInit(void)
+static void vAppInitModules(void)
 {
     /* Initialize peripherals */
     canInit();
@@ -597,16 +627,15 @@ static void vModulesInit(void)
  * @brief Initialize modules that require interrupts to be enabled
  * @note Called from vInitTask or vInitTimerCallback after scheduler starts
  */
-static void vInitModulesWithInterrupts(void)
+static void vAppInitModulesWithInterrupts(void)
 {
-    /* Start RTI counter for periodic interrupts */
-    rtiStartCounter(rtiCOUNTER_BLOCK0);
+    /* Add initializations as needed */
 }
 
 /**
  * @brief Create all application tasks
  */
-static void vCreateTasks(AppContext_t *pxCtx)
+static void vAppCreateTasks(AppContext_t *pxCtx)
 {
     AppResources_t *pxRes = pxCtx->xResources;
     AppTasks_t *pxTasks = pxCtx->xTasks;
@@ -703,7 +732,7 @@ static void vCreateTasks(AppContext_t *pxCtx)
     configASSERT(pxTasks->xDisplayTask != NULL);
 }
 
-static void vCreateObjects(AppContext_t *pxCtx)
+static void vAppCreateObjects(AppContext_t *pxCtx)
 {
     AppResources_t *pxRes = pxCtx->xResources;
     AppSync_t *pxSync = pxCtx->xSync;
@@ -737,10 +766,10 @@ static void vCreateObjects(AppContext_t *pxCtx)
 
 static portTASK_FUNCTION(vInitTask, pvParameters)
 {
-    AppContext_t *pxCtx = (AppContext_t *)pvParameters;
+    (void)pvParameters;
 
     /* Initialize modules that require interrupts */
-    vInitModulesWithInterrupts();
+    vAppInitModulesWithInterrupts();
 
     /* Delete self */
     vTaskDelete(NULL);
@@ -898,7 +927,16 @@ static portTASK_FUNCTION(vRFDataRxTask, pvParameters)
     AppContext_t *pxCtx = (AppContext_t *)pvParameters;
     AppSync_t *pxSync = pxCtx->xSync;
     EventBits_t uxBits;
-    uint8_t xRxBuff[64], xId; // Buffer for RF data
+    /* TODO: Checksum length should be in xbee.h */
+    uint8_t xRxBuff[MAX_PAYLOAD_SIZE + 1], xId, err = 0; // Buffer for RF data
+    uint16_t xRxLen;                                     // Length of received data
+    XBeeAPIStatus_t xStatus;
+    XBeeAPIParsedFrame_t xParsedFrame;
+    msgpack_unpacked msg;
+    msgpack_unpacker unp;
+    msgpack_unpack_return ret;
+    msgpack_object obj;
+    cobs_decode_result result;
 
     __FOREVER__
     {
@@ -913,7 +951,7 @@ static portTASK_FUNCTION(vRFDataRxTask, pvParameters)
         /* Setup RF data reception */
         sciReceive(SCI_REG, 1, xRxBuff);
 
-        /* Wait for the transfer to complete */
+        /* Wait for the transfer to start */
         uxBits = xEventGroupWaitBits(
             pxSync->xSysEvents,
             EVT_SCI_RX_READY,
@@ -923,28 +961,114 @@ static portTASK_FUNCTION(vRFDataRxTask, pvParameters)
 
         if ((uxBits & EVT_SCI_RX_READY) != 0U)
         {
-            //////////////////////////////////////////////
-            // TODO: Placeholder for RF data processing //
-            //////////////////////////////////////////////
-
-            /* Set data ready flag for the relevant task */
-            switch (xId)
+            do
             {
-            case CMD_ID:              // Command identifier
-                uxBits = EVT_SCI_CMD; // | TELEMETRY_READY;
+                xRxLen = XBeeRxLen(sciReceiveByte(SCI_REG));
+            } while (xRxLen == 0); // Wait until the length byte is received
+
+            /* Receive the rest of the frame */
+            sciReceive(SCI_REG, xRxLen, xRxBuff);
+
+            /* Wait for the transfer to complete */
+            uxBits = xEventGroupWaitBits(
+                pxSync->xSysEvents,
+                EVT_SCI_RX_READY,
+                pdTRUE,  // Clear bits after return
+                pdFALSE, // Wait for any bit
+                portMAX_DELAY);
+
+            /* Parse the received data */
+            xStatus = XBeeParseFrame(xRxBuff, xRxLen, &xParsedFrame);
+
+            switch (xStatus)
+            {
+            case XBEE_API_RX_SUCCESS:
+                switch (xParsedFrame.type)
+                {
+                case XBEE_API_TYPE_RX_PACKET:
+                    /* Only commands are received for now */
+                    xId = CMD_ID;
+                    if (msgpack_unpacker_init(&unp, MAX_PAYLOAD_SIZE))
+                    {
+                        /* Copy parsed frame data to unpacker */
+                        if (msgpack_unpacker_buffer_capacity(&unp) < xParsedFrame.rxPacket.rfDataLen)
+                            if (!msgpack_unpacker_reserve_buffer(&unp, xParsedFrame.rxPacket.rfDataLen))
+                                err = 1; // Handle buffer reservation error
+
+                        if (!err)
+                        {
+                            memcpy(msgpack_unpacker_buffer(&unp), xParsedFrame.rxPacket.rfData,
+                                   xParsedFrame.rxPacket.rfDataLen);
+                            msgpack_unpacker_buffer_consumed(&unp, xParsedFrame.rxPacket.rfDataLen);
+                            ret = msgpack_unpacker_next(&unp, &msg);
+                            switch (ret)
+                            {
+                            case MSGPACK_UNPACK_SUCCESS:
+                                obj = msg.data;
+                                result = cobs_decode(xRxBuff, sizeof(xRxBuff), obj.via.bin.ptr, obj.via.bin.size);
+                                if (result.status == COBS_DECODE_OK)
+                                {
+                                    /* TODO: Send command to CMD task queue */
+                                }
+                                else
+                                {
+                                    /* TODO: Handle COBS decoding error */
+                                }
+                                break;
+                            case MSGPACK_UNPACK_CONTINUE:
+                                /* Check capacity, reserve buffer space, copy additional
+                                 * data to the buffer, notify consumed buffer size, then
+                                 * call msgpack_unpacker_next(&unp, &msg) again. */
+                                break;
+                            case MSGPACK_UNPACK_PARSE_ERROR:
+                                /* Discard invalid data */
+                                break;
+                            }
+                        }
+                        err = 0;
+                        msgpack_unpacker_destroy(&unp);
+                    }
+                    else
+                    {
+                        /* TODO: Handle unpacker initialization error */
+                    }
+                    break;
+                case XBEE_API_TYPE_TX_STATUS:
+                    xId = TELEMETRY_ACK_ID;
+                default:
+                    /* Discard unknown packet type */
+                    break;
+                }
+
+                /* Set data ready flag for the relevant task */
+                switch (xId)
+                {
+                case CMD_ID:              // Command identifier
+                    uxBits = EVT_SCI_CMD; // | TELEMETRY_READY;
+                    break;
+                case TELEMETRY_ACK_ID:              // Telemetry ack identifier
+                    uxBits = EVT_SCI_TELEMETRY_ACK; // | CMD_READY;
+                    break;
+                default:
+                    break;
+                }
+
+                xEventGroupSetBits(pxSync->xSysEvents, uxBits);
                 break;
-            case TELEMETRY_ACK_ID:              // Telemetry ack identifier
-                uxBits = EVT_SCI_TELEMETRY_ACK; // | CMD_READY;
-                break;
+            // case XBEE_API_RX_ERROR_INVALID_CHECKSUM:
+            //     /* Handle checksum error */
+            //     break;
+            // case XBEE_API_RX_ERROR_INVALID_FRAME:
+            //     /* Handle frame error */
+            //     break;
             default:
+                /* Discard frame */
                 break;
             }
-
-            xEventGroupSetBits(pxSync->xSysEvents, uxBits);
         }
-    }
 
-    vTaskDelete(NULL);
+        vTaskDelete(NULL);
+    }
 }
 
 // static portTASK_FUNCTION(vRFDataTxTask, pvParameters)
@@ -995,19 +1119,23 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
     AppSync_t *pxSync = pxCtx->xSync;
     AppData_t *pxData = pxCtx->xData;
     EventBits_t uxBits = 0U;
-    uint8_t xTxBuff[64] = {0}, xRxBuff[64] = {0}; // Buffers for telemetry data
-    // size_t xTxLen = 0, xRxLen = 0;             // Length of data to send/receive
+    uint8_t xTxBuff[MAX_PAYLOAD_SIZE], xRxBuff[64], **pxFrame = NULL, *pxFrameID; // Buffers for telemetry data
+    size_t xTxLen = 0, xRxLen = 0;                                                // Length of data to send/receive
     struct
     {
-        float rpm;
-        float battery_voltage;
-        float battery_current;
-        float wheel_speed_fl;
-        float wheel_speed_fr;
+        uint16_t rpm;
+        uint16_t battery_voltage;
+        uint16_t battery_current;
+        uint16_t wheel_speed_fl;
+        uint16_t wheel_speed_fr;
         uint8_t motor1_fault;
         uint8_t motor2_fault;
         /* ... */
     } xLocalData;
+    XBeeAPIStatus_t xStatus;
+    msgpack_sbuffer sbuf;
+    msgpack_packer pk;
+    cobs_encode_result result;
 
     __FOREVER__
     {
@@ -1037,16 +1165,49 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
                 xSemaphoreGive(pxSync->xDataMutex);
             }
 
-            ///////////////////////////////////////////
-            // TODO: Placeholder for data formatting //
-            ///////////////////////////////////////////
+            /* Initialize msgpack buffer and packer */
+            msgpack_sbuffer_init(&sbuf);
+            msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
 
-            /* Send telemetry data to XBee via UART */
-            // sciSend(SCI_REG, len, buffer); // For variable length messages
-            sciSend(SCI_REG, sizeof(xTxBuff), xTxBuff);
+            /* Pack telemetry data into msgpack format */
+            // msgpack_pack_bin_with_body(&pk, (const char *)&xLocalData, sizeof(xLocalData));
+            msgpack_pack_array(&pk, 7);
+            msgpack_pack_uint16(&pk, xLocalData.rpm);
+            msgpack_pack_uint16(&pk, xLocalData.battery_voltage);
+            msgpack_pack_uint16(&pk, xLocalData.battery_current);
+            msgpack_pack_uint16(&pk, xLocalData.wheel_speed_fl);
+            msgpack_pack_uint16(&pk, xLocalData.wheel_speed_fr);
+            msgpack_pack_uint8(&pk, xLocalData.motor1_fault);
+            msgpack_pack_uint8(&pk, xLocalData.motor2_fault);
+            /* ... */
 
-            /* Set a timer to handle retransmission */
-            xTimerStart(pxSync->xTxTimeoutTimer, 0);
+            result = cobs_encode(xTxBuff, sizeof(xTxBuff), sbuf.data, sbuf.size);
+            msgpack_sbuffer_destroy(&sbuf);
+            if (result.status == COBS_ENCODE_OK)
+            {
+                /* Build XBee transmission request API frame */
+                xStatus = XBeeBuildTxRequest((uint8_t *)&dest64, (uint8_t *)&dest16, xTxBuff, result.out_len,
+                                             pxFrame, pxFrameID);
+                /* TODO: Modify the XBee module to return len by reference */
+
+                if (xStatus == XBEE_API_TX_SUCCESS)
+                {
+                    /* Send telemetry data to XBee via UART */
+                    sciSend(SCI_REG, xTxLen, xTxBuff);
+
+                    /* Set a timer to handle retransmission */
+                    xTimerStart(pxSync->xTxTimeoutTimer, 0);
+                }
+                else if (xStatus == XBEE_API_TX_ERROR_FRAME_TOO_LARGE)
+                {
+                    /* TODO: Handle 'frame exceeds maximum payload size' error */
+                }
+                /* TODO: Handle other errors */
+            }
+            else
+            {
+                /* TODO: Handle encoding error */
+            }
         }
         else if ((uxBits & EVT_SCI_TELEMETRY_ACK) != 0U)
         {
@@ -1060,8 +1221,7 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
 
 static portTASK_FUNCTION(vUIInputTask, pvParameters)
 {
-    AppContext_t *pxCtx = (AppContext_t *)pvParameters;
-    (void)pxCtx;
+    (void)pvParameters;
 
     __FOREVER__
     {
@@ -1108,7 +1268,7 @@ static void vInitTimerCallback(TimerHandle_t xTimer)
     configASSERT(xTimer != NULL);
 
     /* Initialize modules that require interrupts */
-    vInitModulesWithInterrupts();
+    vAppInitModulesWithInterrupts();
 
     /* Delete self */
     xTimerDelete(xTimer, 0);

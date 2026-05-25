@@ -11,3 +11,6 @@
 [submodule "msgpack/cmp"]
 	path = msgpack/cmp
 	url = https://github.com/camgunz/cmp.git
+[submodule "xbee/digi_xbee_api"]
+	path = xbee/digi_xbee_api
+	url = https://github.com/fsae-electronic/digi_xbee_api.git
