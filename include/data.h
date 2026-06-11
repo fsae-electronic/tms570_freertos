@@ -3,22 +3,102 @@
 
 #include <stdint.h>
 
-/* Sensors and actuators IDs:
- * Pedals: 0x120 b0-1: TPS1 ; b2-3: TPS2 ; b4-5: Front brake ; b6-7: Rear brake
- * Steering wheel: 0x121 b0-1: Steering angle
- * Speed: 0x122 b0-1: FR ; b2-3: FL ; b4-5: RR ; b6-7: RL
- * Current: 0x123 b0-1: AC_D1 ; b2-3: AC_D2 ; DC_D1 ; b4-5: DC_D2 ; b6-7: DC_D3
- */
+/**************************************************************************************
+ *                                                                                    *
+ * Mailboxes                                                                          *
+ *                                                                                    *
+ **************************************************************************************
+ *                                                                                    *
+ * Front ADC2CAN                                                                      *
+ *                                                                                    *
+ * ID 0x501:                                                                          *
+ * b0-1: apps 1                                                                       *
+ * b2-3: apps 2                                                                       *
+ * b4-5: front brake                                                                  *
+ *                                                                                    *
+ * ID 0x502:                                                                          *
+ * b0-1: front wheel 1                                                                *
+ * b2-3: front wheel 2                                                                *
+ * b4-5: steering                                                                     *
+ *                                                                                    *
+ **************************************************************************************
+ *                                                                                    *
+ * Rear ADC2CAN                                                                       *
+ *                                                                                    *
+ * ID 0x503:                                                                          *
+ * b0-1: ac 1                                                                         *
+ * b2-3: ac 2                                                                         *
+ * b4-5: dc 1                                                                         *
+ * b6-7: dc 2                                                                         *
+ *                                                                                    *
+ * ID 0x504:                                                                          *
+ * b0-1: rear brake                                                                   *
+ *                                                                                    *
+ **************************************************************************************
+ *                                                                                    *
+ * Main ECU                                                                           *
+ *                                                                                    *
+ * ID 0x505:                                                                          *
+ * b0-1: drivers status                                                               *
+ *                                                                                    *
+ * ID 0x506:                                                                          *
+ * b0-1: error msgs                                                                   *
+ *                                                                                    *
+ * ID 0x60n:                                                                          *
+ * Sensor calibration mapped to 0x50n messages                                        *
+ *                                                                                    *
+ **************************************************************************************
+ *                                                                                    *
+ * Drivers                                                                            *
+ *                                                                                    *
+ * ID 0x200+Node_ID:                                                                  *
+ * b0: ControlWord                                                                    *
+ * b1: Node_ID                                                                        *
+ * b2-5: Target Velocity                                                              *
+ * b6-7: Target Torque                                                                *
+ *                                                                                    *
+ * ID 0x507:                                                                          *
+ * b0-1: speed N1                                                                     *
+ * b2-3: speed N2                                                                     *
+ * b4-5: battery                                                                      *
+ *                                                                                    *
+ * ID 0x508:                                                                          *
+ * b0-1: motor temp N1                                                                *
+ * b2-3: motor temp N2                                                                *
+ * b4-5: driver temp N1                                                               *
+ * b6-7: driver temp N2                                                               *
+ *                                                                                    *
+ **************************************************************************************/
 
-#define SENSORS_ID 0x120
-#define WHEEL_SPEED_ID 0x121
-#define MOTOR1_ID 0x122
-#define MOTOR2_ID 0x123
-#define STATUS_DRIVERS_ID 0x124
-#define DYNAMIC_ID 0x125
+typedef struct
+{
+    union
+    {
+        uint8_t raw[6];
 
-#define BUTTONS_ID 0x200
-#define STATUS_ON_BOARD_ECU_ID 0x201
+        struct
+        {
+            uint16_t xAPPS1;
+            uint16_t xAPPS2;
+            uint16_t xFBrake;
+        } values;
+    };
+} DataFADC1_t;
+
+typedef struct
+{
+    union
+    {
+        uint8_t raw[6];
+
+        struct
+        {
+            uint16_t xFWheel1;
+            uint16_t xFWheel2;
+            uint16_t xSteering;
+        } values;
+    };
+} DataFADC2_t;
 
 typedef struct
 {
@@ -28,13 +108,52 @@ typedef struct
 
         struct
         {
-            uint16_t tps;
-            uint16_t brake_front;
-            uint16_t brake_rear;
-            uint16_t steering_angle;
+            uint16_t xAC1;
+            uint16_t xAC2;
+            uint16_t xDC1;
+            uint16_t xDC2;
         } values;
     };
-} sensors_data_t;
+} DataRADC1_t;
+
+typedef struct
+{
+    union
+    {
+        uint8_t raw[2];
+
+        struct
+        {
+            uint16_t xRBrake;
+        } values;
+    };
+} DataRADC2_t;
+
+typedef struct
+{
+    union
+    {
+        uint8_t raw[2];
+
+        struct
+        {
+            uint16_t xDrvStatus;
+        } values;
+    };
+} DataDrvStatus_t;
+
+typedef struct
+{
+    union
+    {
+        uint8_t raw[2];
+
+        struct
+        {
+            uint16_t xErrMsg;
+        } values;
+    };
+} DataErrMsg_t;
 
 typedef struct
 {
@@ -44,13 +163,28 @@ typedef struct
 
         struct
         {
-            uint16_t wheel_speed_fl; // Front right wheel speed
-            uint16_t wheel_speed_fr; // Front left wheel speed
-            uint16_t wheel_speed_rl; // Rear left wheel speed
-            uint16_t wheel_speed_rr; // Rear right wheel speed
+            uint8_t xControlWord;
+            uint8_t xNodeID;
+            uint32_t xTargetVelocity;
+            uint16_t xTargetTorque;
         } values;
     };
-} speed_data_t;
+} DataDrvCtrl_t;
+
+typedef struct
+{
+    union
+    {
+        uint8_t raw[6];
+
+        struct
+        {
+            uint16_t xSpeedN1;
+            uint16_t xSpeedN2;
+            uint16_t xBattery;
+        } values;
+    };
+} DataDrv1_t;
 
 typedef struct
 {
@@ -60,71 +194,12 @@ typedef struct
 
         struct
         {
-            uint16_t rpm;             // Engine RPM
-            uint16_t battey_voltage;  // Battery voltage
-            uint16_t battery_current; // Battery current
+            uint16_t xMotorTempN1;
+            uint16_t xMotorTempN2;
+            uint16_t xDriverTempN1;
+            uint16_t xDriverTempN2;
         } values;
     };
-} dynamic_data_t;
-
-typedef struct
-{
-    union
-    {
-        uint8_t raw[8];
-
-        struct
-        {
-            uint16_t motor_voltage; // AC current sensor 1
-            uint16_t motor_current; // AC current sensor 2
-            uint16_t motor_temp;    // DC current sensor 1
-        } values;
-    };
-} motor_data_t;
-
-typedef struct
-{
-    union
-    {
-        uint8_t raw[8];
-
-        struct
-        {
-            uint8_t motor1_fault; // Motor 1 fault -> motor_fault_t
-            uint8_t motor2_fault; // Motor 2 fault
-            uint8_t drive_state;  // bits 2-3: Drive state (0 = OFF, 1 = ON, 2 = FAULT)
-        } values;
-    };
-} drivers_status_data_t;
-
-typedef struct
-{
-    union
-    {
-        uint8_t raw[8];
-
-        struct
-        {
-            uint8_t drive_enabled;     // bit 0: Drive enabled
-            uint8_t traction_on;       // bit 1: Traction control on
-            uint8_t mode;              // bit 2: Mode (0 = Normal, 1 = Race)
-            uint8_t telemetry_enabled; // bit 3: Telemetry enabled
-        } values;
-    };
-} buttons_data_t;
-
-typedef struct
-{
-    union
-    {
-        uint8_t raw[8];
-
-        struct
-        {
-            uint8_t on_board_ok;
-            uint8_t can_ok;
-        } values;
-    };
-} on_board_status_data_t;
+} DataDrv2_t;
 
 #endif /* _DATA_H_ */

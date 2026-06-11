@@ -25,29 +25,24 @@ Task control blocks and stacks are defined in the application resource block (`x
 The main tasks are organized by priority:
 
 - `Init` performs post-scheduler initialization that requires interrupts.
-- `DataUpdate` processes CAN data and refreshes the dashboard state.
+- `DataUpdate` receives and processes CAN frames and updates local data.
 - `Rules` evaluates safety and compliance logic.
 - `DriversFSM` manages driver-state decisions.
 - `RFDataRx` receives XBee packets, decodes them, and dispatches commands.
 - `Cmd` handles command processing.
 - `Telemetry` packs telemetry and transmits it over XBee.
-- `Display` refreshes the GUI.
-
-Some tasks are present as placeholders or temporarily disabled in the source, but the scheduling model is already laid out around those roles.
 
 ### Synchronization and Communication
 
-The application relies on FreeRTOS primitives instead of queues for most data flow (to keep ISRs as short and simple as possible):
+The application relies on FreeRTOS primitives for most data flow (to keep ISRs as short and simple as possible), using event flags to model periodic events and asynchronous notifications:
 
 - `EventGroup` for task wake-up and inter-task signaling.
 - `Mutex` for protecting shared snapshots of application data.
 - `Software timers` for (optionally) deferred startup actions and telemetry timeout handling.
 
-The event bits are used to model periodic events and asynchronous notifications. For example, periodic data, telemetry, UI, and display updates are represented as event flags, while RF and telemetry acknowledgements use separate flags for command dispatch.
-
 ### Initialization
 
-`vAppInitModules()`, configures the peripherals before the scheduler starts. In the current implementation it initializes CAN, GIO, SCI, SPI, EEPROM/Flash access through TI FEE, the display, and the dashboard/data structures. Once the scheduler is running, `vInitTask()` (optionally) calls `vAppInitModulesWithInterrupts()` to cofigure drivers that require interrupts to be enabled before they can be used.
+`vAppInitModules()`, configures the peripherals before the scheduler starts. In the current implementation it initializes CAN, GIO, SCI and EEPROM/Flash access through TI FEE. Once the scheduler is running, `vInitTask()` (optionally) calls `vAppInitModulesWithInterrupts()` to cofigure drivers that require interrupts to be enabled before they can be used.
 
 ## HALCoGen Configuration
 

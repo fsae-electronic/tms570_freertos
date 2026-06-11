@@ -53,7 +53,6 @@
 #include "can.h"
 #include "gio.h"
 #include "sci.h"
-#include "spi.h"
 #include "sys_dma.h"
 
 /* USER CODE BEGIN (0) */
@@ -144,26 +143,6 @@ void sciNotification(sciBASE_t *sci, uint32 flags)
 }
 
 /* USER CODE BEGIN (30) */
-/* USER CODE END */
-#pragma WEAK(spiNotification)
-void spiNotification(spiBASE_t *spi, uint32 flags)
-{
-/*  enter user code between the USER CODE BEGIN and USER CODE END. */
-/* USER CODE BEGIN (31) */
-/* USER CODE END */
-}
-
-/* USER CODE BEGIN (32) */
-/* USER CODE END */
-#pragma WEAK(spiEndNotification)
-void spiEndNotification(spiBASE_t *spi)
-{
-/*  enter user code between the USER CODE BEGIN and USER CODE END. */
-/* USER CODE BEGIN (33) */
-/* USER CODE END */
-}
-
-/* USER CODE BEGIN (34) */
 /* USER CODE END */
 
 

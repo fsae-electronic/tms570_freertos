@@ -77,12 +77,12 @@ extern "C"
 // Event flags (32 bits) ///////////////////////////////////////////////////////////////
 
 /* CAN mailbox updates */
-#define EVT_CAN_SENSORS (1 << 0)
-#define EVT_CAN_SPEED (1 << 1)
-#define EVT_CAN_MOTOR1 (1 << 2)
-#define EVT_CAN_MOTOR2 (1 << 3)
-#define EVT_CAN_DRIVERS_STATUS (1 << 4)
-#define EVT_CAN_DYNAMIC (1 << 5)
+#define EVT_CAN_FADC1 (1 << 0)
+#define EVT_CAN_FADC2 (1 << 1)
+#define EVT_CAN_RADC1 (1 << 2)
+#define EVT_CAN_RADC2 (1 << 3)
+#define EVT_CAN_DRV1 (1 << 4)
+#define EVT_CAN_DRV2 (1 << 5)
 /* RF data reception */
 #define EVT_SCI_RX_READY (1 << 10)
 #define EVT_SCI_TX_READY (1 << 11)
@@ -90,26 +90,32 @@ extern "C"
 #define EVT_SCI_TELEMETRY_ACK (1 << 13)
 #define EVT_TELEMETRY_NACK (1 << 14)
 /* Data ready for processing */
-#define EVT_NEW_DATA (EVT_CAN_SENSORS | EVT_CAN_SPEED | EVT_CAN_MOTOR1 | EVT_CAN_MOTOR2 | EVT_CAN_DRIVERS_STATUS | EVT_CAN_DYNAMIC)
+#define EVT_NEW_DATA (EVT_CAN_FADC1 | EVT_CAN_FADC2 | EVT_CAN_RADC1 | EVT_CAN_RADC2 | EVT_CAN_DRV1 | EVT_CAN_DRV2)
 #define EVT_DATA_UPDATE (1 << 15)
 #define EVT_DATA_APPROVED (1 << 16)
 /* Task ready flags */
-#define CMD_READY (1 << 20)
-#define TELEMETRY_READY (1 << 21)
+#define EVT_CMD_READY (1 << 20)
+#define EVT_TELEMETRY_READY (1 << 21)
 /* Periodic events */
 #define EVT_PERIODIC_TELEMETRY (1 << 25)
 
-////////////////////////////////////////////////////////////////////////////////////////
+// CAN mailboxes ///////////////////////////////////////////////////////////////////////
 
-/* CAN mailboxes */
-#define SENSORS_MAILBOX canMESSAGE_BOX1        // Rx
-#define SPEED_MAILBOX canMESSAGE_BOX2          // Rx
-#define MOTOR1_MAILBOX canMESSAGE_BOX3         // Tx
-#define MOTOR2_MAILBOX canMESSAGE_BOX4         // Tx
-#define DRIVERS_STATUS_MAILBOX canMESSAGE_BOX5 // Rx
-#define DYNAMIC_MAILBOX canMESSAGE_BOX6        // Rx
-#define BUTTONS_MAILBOX canMESSAGE_BOX9        // Tx
-#define STATUS_MAILBOX canMESSAGE_BOX10        // Tx
+/* ADC2CAN */
+#define FADC1_MAILBOX canMESSAGE_BOX1 // Rx
+#define FADC2_MAILBOX canMESSAGE_BOX2 // Rx
+#define RADC1_MAILBOX canMESSAGE_BOX3 // Rx
+#define RADC2_MAILBOX canMESSAGE_BOX4 // Rx
+/* Main ECU */
+#define DRV_STATUS_MAILBOX canMESSAGE_BOX5 // Tx
+#define ERR_MSG_MAILBOX canMESSAGE_BOX6    // Tx
+#define CALIB_MAILBOX canMESSAGE_BOX9      // Tx, base for 0x50n messages
+/* Drivers */
+#define DRV1_MAILBOX canMESSAGE_BOX7      // Rx
+#define DRV2_MAILBOX canMESSAGE_BOX8      // Rx
+#define DRV_CTRL_MAILBOX canMESSAGE_BOX17 // Tx
+
+////////////////////////////////////////////////////////////////////////////////////////
 
 /* Peripheral registers */
 #define CAN_REG canREG1
@@ -210,12 +216,12 @@ typedef struct
 /* Data struct for local copies */
 typedef struct
 {
-    sensors_data_t sensors_data;
-    speed_data_t speed_data;
-    dynamic_data_t dynamic_data;
-    motor_data_t motor1_data;
-    motor_data_t motor2_data;
-    drivers_status_data_t drivers_status_data;
+    DataFADC1_t xFADC1;
+    DataFADC2_t xFADC2;
+    DataRADC1_t xRADC1;
+    DataRADC2_t xRADC2;
+    DataDrv1_t xDrv1;
+    DataDrv2_t xDrv2;
 } AppData_t;
 
 /* Unified app context */
@@ -414,23 +420,23 @@ void canMessageNotification(canBASE_t *node, uint32 messageBox)
     {
         switch (messageBox)
         {
-        case SENSORS_MAILBOX:
-            xEvent = EVT_CAN_SENSORS;
+        case FADC1_MAILBOX:
+            xEvent = EVT_CAN_FADC1;
             break;
-        case SPEED_MAILBOX:
-            xEvent = EVT_CAN_SPEED;
+        case FADC2_MAILBOX:
+            xEvent = EVT_CAN_FADC2;
             break;
-        case MOTOR1_MAILBOX:
-            xEvent = EVT_CAN_MOTOR1;
+        case RADC1_MAILBOX:
+            xEvent = EVT_CAN_RADC1;
             break;
-        case MOTOR2_MAILBOX:
-            xEvent = EVT_CAN_MOTOR2;
+        case RADC2_MAILBOX:
+            xEvent = EVT_CAN_RADC2;
             break;
-        case DRIVERS_STATUS_MAILBOX:
-            xEvent = EVT_CAN_DRIVERS_STATUS;
+        case DRV1_MAILBOX:
+            xEvent = EVT_CAN_DRV1;
             break;
-        case DYNAMIC_MAILBOX:
-            xEvent = EVT_CAN_DYNAMIC;
+        case DRV2_MAILBOX:
+            xEvent = EVT_CAN_DRV2;
             break;
         default:
             break;
@@ -735,36 +741,34 @@ static portTASK_FUNCTION(vDataUpdateTask, pvParameters)
         if ((uxBits & EVT_DATA_UPDATE) != 0U)
         {
             /* Read new frames and update local fields */
-            if (uxBits & EVT_CAN_SENSORS)
-                canGetData(canREG1, SENSORS_MAILBOX, xLocalData.sensors_data.raw);
-            if (uxBits & EVT_CAN_SPEED)
-                canGetData(canREG1, SPEED_MAILBOX, xLocalData.speed_data.raw);
-            if (uxBits & EVT_CAN_MOTOR1)
-                canGetData(canREG1, MOTOR1_MAILBOX, xLocalData.motor1_data.raw);
-            if (uxBits & EVT_CAN_MOTOR2)
-                canGetData(canREG1, MOTOR2_MAILBOX, xLocalData.motor2_data.raw);
-            if (uxBits & EVT_CAN_DRIVERS_STATUS)
-                canGetData(canREG1, DRIVERS_STATUS_MAILBOX, xLocalData.drivers_status_data.raw);
-            if (uxBits & EVT_CAN_DYNAMIC)
-                canGetData(canREG1, DYNAMIC_MAILBOX, xLocalData.dynamic_data.raw);
+            if (uxBits & EVT_CAN_FADC1)
+                canGetData(canREG1, FADC1_MAILBOX, xLocalData.xFADC1.raw);
+            if (uxBits & EVT_CAN_FADC2)
+                canGetData(canREG1, FADC2_MAILBOX, xLocalData.xFADC2.raw);
+            if (uxBits & EVT_CAN_RADC1)
+                canGetData(canREG1, RADC1_MAILBOX, xLocalData.xRADC1.raw);
+            if (uxBits & EVT_CAN_RADC2)
+                canGetData(canREG1, RADC2_MAILBOX, xLocalData.xRADC2.raw);
+            if (uxBits & EVT_CAN_DRV1)
+                canGetData(canREG1, DRV1_MAILBOX, xLocalData.xDrv1.raw);
+            if (uxBits & EVT_CAN_DRV2)
+                canGetData(canREG1, DRV2_MAILBOX, xLocalData.xDrv2.raw);
 
             /* Update global data */
-            if (xSemaphoreTake(pxSync->xDataMutex, pdMS_TO_TICKS(10)) == pdTRUE)
+            if (xSemaphoreTake(pxSync->xDataMutex, pdMS_TO_TICKS(portMAX_DELAY)) == pdTRUE)
             {
-                if (uxBits & EVT_CAN_SENSORS)
-                    pxData->sensors_data = xLocalData.sensors_data;
-                if (uxBits & EVT_CAN_SPEED)
-                    pxData->speed_data = xLocalData.speed_data;
-                if (uxBits & EVT_CAN_DYNAMIC)
-                    pxData->dynamic_data = xLocalData.dynamic_data;
-                if (uxBits & EVT_CAN_MOTOR1)
-                    pxData->motor1_data = xLocalData.motor1_data;
-                if (uxBits & EVT_CAN_MOTOR2)
-                    pxData->motor2_data = xLocalData.motor2_data;
-                if (uxBits & EVT_CAN_DRIVERS_STATUS)
-                    pxData->drivers_status_data = xLocalData.drivers_status_data;
-                if (uxBits & EVT_CAN_DYNAMIC)
-                    pxData->dynamic_data = xLocalData.dynamic_data;
+                if (uxBits & EVT_CAN_FADC1)
+                    pxData->xFADC1 = xLocalData.xFADC1;
+                if (uxBits & EVT_CAN_FADC2)
+                    pxData->xFADC2 = xLocalData.xFADC2;
+                if (uxBits & EVT_CAN_RADC1)
+                    pxData->xRADC1 = xLocalData.xRADC1;
+                if (uxBits & EVT_CAN_RADC2)
+                    pxData->xRADC2 = xLocalData.xRADC2;
+                if (uxBits & EVT_CAN_DRV1)
+                    pxData->xDrv1 = xLocalData.xDrv1;
+                if (uxBits & EVT_CAN_DRV2)
+                    pxData->xDrv2 = xLocalData.xDrv2;
 
                 xSemaphoreGive(pxSync->xDataMutex);
                 xEventGroupSetBits(pxSync->xSysEvents, EVT_NEW_DATA);
@@ -783,9 +787,9 @@ static portTASK_FUNCTION(vRulesTask, pvParameters)
     EventBits_t uxBits;
     struct
     {
-        uint16_t tps;
-        uint16_t brake_front;
-        uint16_t brake_rear;
+        uint16_t xAPPS1;
+        uint16_t xAPPS2;
+        uint16_t xFBrake;
         /* ... */
     } xLocalData;
 
@@ -802,22 +806,21 @@ static portTASK_FUNCTION(vRulesTask, pvParameters)
         /* Local copy of the fields that need rule checking */
         if (xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
         {
-            xLocalData.tps = pxData->sensors_data.values.tps;
-            xLocalData.brake_front = pxData->sensors_data.values.brake_front;
-            xLocalData.brake_rear = pxData->sensors_data.values.brake_rear;
+            xLocalData.xAPPS1 = pxData->xFADC1.values.xAPPS1;
+            xLocalData.xAPPS2 = pxData->xFADC1.values.xAPPS2;
+            xLocalData.xFBrake = pxData->xFADC1.values.xFBrake;
             /* ... */
 
             xSemaphoreGive(pxSync->xDataMutex);
 
-            /* This is not needed if rule checking is periodic */
+            /////////////////////////////////////////////
+            // TODO: Placeholder for compliance checks //
+            /////////////////////////////////////////////
+
             xEventGroupSetBits(pxSync->xSysEvents, EVT_DATA_APPROVED);
+
+            /* TODO: Send rulebreaks via CAN */
         }
-
-        /////////////////////////////////////////////
-        // TODO: Placeholder for compliance checks //
-        /////////////////////////////////////////////
-
-        /* TODO: Send rulebreaks via CAN */
     }
 
     vTaskDelete(NULL);
@@ -831,12 +834,8 @@ static portTASK_FUNCTION(vDriversFSMTask, pvParameters)
     EventBits_t uxBits;
     struct
     {
-        uint8_t drive_enabled;
-        float motor1_voltage;
-        float motor1_current;
-        float motor2_voltage;
-        float motor2_current;
-        uint8_t drive_state;
+        uint8_t xSpeedN1;
+        uint8_t xSpeedN2;
         /* ... */
     } xLocalData;
 
@@ -853,19 +852,16 @@ static portTASK_FUNCTION(vDriversFSMTask, pvParameters)
         /* Local copy of control-related state */
         if (xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
         {
-            xLocalData.motor1_voltage = pxData->motor1_data.values.motor_voltage;
-            xLocalData.motor1_current = pxData->motor1_data.values.motor_current;
-            xLocalData.motor2_voltage = pxData->motor2_data.values.motor_voltage;
-            xLocalData.motor2_current = pxData->motor2_data.values.motor_current;
-            xLocalData.drive_state = pxData->drivers_status_data.values.drive_state;
+            xLocalData.xSpeedN1 = pxData->xDrv1.values.xSpeedN1;
+            xLocalData.xSpeedN2 = pxData->xDrv1.values.xSpeedN2;
             /* ... */
 
             xSemaphoreGive(pxSync->xDataMutex);
-        }
 
-        ////////////////////////////////////////////
-        // TODO: Placeholder for driver FSM logic //
-        ////////////////////////////////////////////
+            ////////////////////////////////////////////
+            // TODO: Placeholder for driver FSM logic //
+            ////////////////////////////////////////////
+        }
     }
 
     vTaskDelete(NULL);
@@ -892,9 +888,9 @@ static portTASK_FUNCTION(vRFDataRxTask, pvParameters)
         /* Avoid starting a new transfer before the previous one is handled */
         // uxBits = xEventGroupWaitBits(
         //     pxSync->xSysEvents,
-        //     CMD_READY | TELEMETRY_READY, // Wait if either is busy
-        //     pdTRUE,                      // Clear bits after return
-        //     pdTRUE,                      // Wait for all bits
+        //     EVT_CMD_READY | EVT_TELEMETRY_READY, // Wait if either is busy
+        //     pdTRUE,                              // Clear bits after return
+        //     pdTRUE,                              // Wait for all bits
         //     portMAX_DELAY);
 
         /* Setup RF data reception */
@@ -993,10 +989,10 @@ static portTASK_FUNCTION(vRFDataRxTask, pvParameters)
                 switch (xId)
                 {
                 case CMD_ID:              // Command identifier
-                    uxBits = EVT_SCI_CMD; // | TELEMETRY_READY;
+                    uxBits = EVT_SCI_CMD; // | EVT_TELEMETRY_READY;
                     break;
                 case TELEMETRY_ACK_ID:              // Telemetry ack identifier
-                    uxBits = EVT_SCI_TELEMETRY_ACK; // | CMD_READY;
+                    uxBits = EVT_SCI_TELEMETRY_ACK; // | EVT_CMD_READY;
                     break;
                 default:
                     break;
@@ -1027,8 +1023,8 @@ static portTASK_FUNCTION(vRFDataRxTask, pvParameters)
 
 //     __FOREVER__
 //     {
-//         /* Unlike Rx, Tx can be done inside tasks as long as proper synchronization is
-//          * maintained, such as using a mutex to block sciSend from being called
+//         /* Unlike Rx, Tx can be done inside tasks as long as proper synchronization
+//          * is maintained, such as using a mutex to block sciSend from being called
 //          * concurrently.
 //          */
 //     }
@@ -1072,13 +1068,8 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
     size_t xTxLen = 0, xRxLen = 0;                                                // Length of data to send/receive
     struct
     {
-        uint16_t rpm;
-        uint16_t battery_voltage;
-        uint16_t battery_current;
-        uint16_t wheel_speed_fl;
-        uint16_t wheel_speed_fr;
-        uint8_t motor1_fault;
-        uint8_t motor2_fault;
+        DataFADC1_t xFADC1;
+        DataFADC2_t xFADC2;
         /* ... */
     } xLocalData;
     XBeeAPIStatus_t xStatus;
@@ -1102,13 +1093,8 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
                 xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
             {
                 /* Local copy of telemetry data */
-                xLocalData.rpm = pxData->dynamic_data.values.rpm;
-                xLocalData.battery_voltage = pxData->dynamic_data.values.battey_voltage;
-                xLocalData.battery_current = pxData->dynamic_data.values.battery_current;
-                xLocalData.wheel_speed_fl = pxData->speed_data.values.wheel_speed_fl;
-                xLocalData.wheel_speed_fr = pxData->speed_data.values.wheel_speed_fr;
-                xLocalData.motor1_fault = pxData->drivers_status_data.values.motor1_fault;
-                xLocalData.motor2_fault = pxData->drivers_status_data.values.motor2_fault;
+                xLocalData.xFADC1 = pxData->xFADC1;
+                xLocalData.xFADC2 = pxData->xFADC2;
                 /* ... */
 
                 xSemaphoreGive(pxSync->xDataMutex);
@@ -1121,13 +1107,12 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
             /* Pack telemetry data into msgpack format */
             // msgpack_pack_bin_with_body(&pk, (const char *)&xLocalData, sizeof(xLocalData));
             msgpack_pack_array(&pk, 7);
-            msgpack_pack_uint16(&pk, xLocalData.rpm);
-            msgpack_pack_uint16(&pk, xLocalData.battery_voltage);
-            msgpack_pack_uint16(&pk, xLocalData.battery_current);
-            msgpack_pack_uint16(&pk, xLocalData.wheel_speed_fl);
-            msgpack_pack_uint16(&pk, xLocalData.wheel_speed_fr);
-            msgpack_pack_uint8(&pk, xLocalData.motor1_fault);
-            msgpack_pack_uint8(&pk, xLocalData.motor2_fault);
+            msgpack_pack_uint16(&pk, xLocalData.xFADC1.values.xAPPS1);
+            msgpack_pack_uint16(&pk, xLocalData.xFADC1.values.xAPPS2);
+            msgpack_pack_uint16(&pk, xLocalData.xFADC1.values.xFBrake);
+            msgpack_pack_uint16(&pk, xLocalData.xFADC2.values.xFWheel1);
+            msgpack_pack_uint16(&pk, xLocalData.xFADC2.values.xFWheel2);
+            msgpack_pack_uint16(&pk, xLocalData.xFADC2.values.xSteering);
             /* ... */
 
             result = cobs_encode(xTxBuff, sizeof(xTxBuff), sbuf.data, sbuf.size);
