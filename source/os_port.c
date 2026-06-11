@@ -380,6 +380,9 @@ static void prvSetupTimerInterrupt(void)
 
 	/* COMPSEL0 will use the RTIFRC0 counter. */
 	portRTI_COMPCTRL_REG = 0x00000000U;
+	
+	/* COMPSEL1-3 use RTIFRC1 */
+	portRTI_COMPCTRL_REG |=	0x00001000U | 0x00000100U | 0x00000010U;
 
 	/* Initialise the counter and the prescale counter registers. */
 	portRTI_CNT0_UC0_REG  =  0x00000000U;

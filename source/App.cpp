@@ -30,7 +30,6 @@ extern "C"
 #include "gio.h"
 #include "rti.h"
 #include "sci.h"
-#include "spi.h"
 #include "ti_fee.h"
 
 /* Application includes */
@@ -42,13 +41,8 @@ extern "C"
 }
 #endif
 
-#include "Bridgetek_EVE2.hpp"
-#include "dashboard.hpp"
-#include "data.hpp"
-#include "test_main_ecu.hpp"
-#include "ui_buttons.hpp"
-#include "ui_rpm_bar.hpp"
-#include "ui_touch.hpp"
+#include "data.h"
+#include "test/test_App.h"
 
 /* ---------------------------------------------------------------------------------- *
  * Macro constants and definitions                                                    *
@@ -58,6 +52,10 @@ extern "C"
 #define TASK_STACK_WORDS(sz_bytes) ((sz_bytes) / sizeof(StackType_t))
 #define __FOREVER__ for (;;)
 
+#ifndef ENABLE_APP_TEST
+#define ENABLE_APP_TEST
+#endif
+
 /* Task priorities */
 #define PRIO_INIT PRIO_MAX    // Must perform setup
 #define PRIO_DATA_UPDATE (6U) // 60Hz data update from CAN
@@ -66,8 +64,6 @@ extern "C"
 #define PRIO_DRIVERS_FSM (3U) // Drivers state machine
 #define PRIO_CMD (3U)         // Command intake affects drivers control
 #define PRIO_TELEMETRY (2U)   // 50Hz telemetry
-#define PRIO_UI_INPUT (1U)    // Touch input processing
-#define PRIO_DISPLAY (1U)     // 30Hz display refresh
 
 /* Task stack sizes */
 #define STACK_INIT TASK_STACK_WORDS(configMINIMAL_STACK_SIZE)
@@ -77,8 +73,6 @@ extern "C"
 #define STACK_RF_DATA_RX TASK_STACK_WORDS(512)
 #define STACK_CMD TASK_STACK_WORDS(512)
 #define STACK_TELEMETRY TASK_STACK_WORDS(512)
-#define STACK_UI_INPUT TASK_STACK_WORDS(256)
-#define STACK_DISPLAY TASK_STACK_WORDS(768)
 
 // Event flags (32 bits) ///////////////////////////////////////////////////////////////
 
@@ -96,16 +90,14 @@ extern "C"
 #define EVT_SCI_TELEMETRY_ACK (1 << 13)
 #define EVT_TELEMETRY_NACK (1 << 14)
 /* Data ready for processing */
-#define EVT_NEW_DATA (1 << 15)
+#define EVT_NEW_DATA (EVT_CAN_SENSORS | EVT_CAN_SPEED | EVT_CAN_MOTOR1 | EVT_CAN_MOTOR2 | EVT_CAN_DRIVERS_STATUS | EVT_CAN_DYNAMIC)
+#define EVT_DATA_UPDATE (1 << 15)
 #define EVT_DATA_APPROVED (1 << 16)
 /* Task ready flags */
 #define CMD_READY (1 << 20)
 #define TELEMETRY_READY (1 << 21)
 /* Periodic events */
-#define EVT_PERIODIC_DATA_UPDATE (1 << 25)
-#define EVT_PERIODIC_TELEMETRY (1 << 26)
-#define EVT_PERIODIC_UI_INPUT (1 << 27)
-#define EVT_PERIODIC_DISPLAY_UPDATE (1 << 28)
+#define EVT_PERIODIC_TELEMETRY (1 << 25)
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -122,24 +114,20 @@ extern "C"
 /* Peripheral registers */
 #define CAN_REG canREG1
 #define SCI_REG sciREG
-#define SPI_REG spiREG4
 
 /* Clock and update rates */
-#define CLOCK_RTI_HZ 10000000                      // 10MHz
-#define SCREEN_UPDATE_TICKS (CLOCK_RTI_HZ / 30)    // 30Hz
-#define DATA_UPDATE_TICKS (CLOCK_RTI_HZ / 60)      // 60Hz
-#define TELEMETRY_UPDATE_TICKS (CLOCK_RTI_HZ / 50) // 50Hz
+// #define CLOCK_RTI_HZ 1000000                       // 1MHz
+// #define TELEMETRY_UPDATE_TICKS (CLOCK_RTI_HZ / 50) // 50Hz
 
 /* RTI is blocked by default (this FreeRTOS port uses RTI Counter 0 Compare 0 to
- * generate the system tick). In order to use it, rti.c has to be created and modified
- * directly so that there is no conflict with prvSetupTimerInterrupt(). Periodic events
- * could also be generated using software timers (see vPeriodicTimerCallback).
+ * generate the system tick). In order to use it, rti.c has to be manually added to the
+ * project. Modify prvSetupTimerInterrupt() in os_port.c as needed to avoid conflicts
+ * with rtiInit(). Periodic events could also be generated using software timers (see
+ * vPeriodicTimerCallback).
  */
 
 /* RTI notifications */
-#define RTI_SCREEN_UPDATE rtiNOTIFICATION_COMPARE1
-#define RTI_DATA_UPDATE rtiNOTIFICATION_COMPARE2
-#define RTI_TELEMETRY_UPDATE rtiNOTIFICATION_COMPARE3
+#define RTI_TELEMETRY_UPDATE rtiNOTIFICATION_COMPARE1
 
 /* Command reception */
 #define CMD_LENGTH 16U
@@ -162,8 +150,6 @@ typedef struct
     TaskHandle_t xRFDataRxTask;
     TaskHandle_t xCmdTask;
     TaskHandle_t xTelemetryTask;
-    TaskHandle_t xUIInputTask;
-    TaskHandle_t xDisplayTask;
 } AppTasks_t;
 
 /* Synchronization and inter-task communication */
@@ -173,10 +159,17 @@ typedef struct
      * modules. Tasks can just read the latest data when they receive an event flag.
      */
     EventGroupHandle_t xSysEvents; // Event flags
-    SemaphoreHandle_t xDataMutex;  // Protect data if needed
-    TimerHandle_t xInitTimer;      // Post scheduler initializations
-    TimerHandle_t xPeriodicTimer;  // Periodic events
+    /* Tasks need data that is mutex locked for consistency, so to avoid blocking
+     * updates and losing data, local copies should be used to maintain protected access
+     * as short as possible.
+     */
+    SemaphoreHandle_t xDataMutex;
+    // TimerHandle_t xInitTimer;      // Post scheduler initializations
+    // TimerHandle_t xPeriodicTimer;  // Periodic events
     TimerHandle_t xTxTimeoutTimer; // Telemetry transmission timeout
+#ifdef ENABLE_APP_TEST
+    TimerHandle_t xAppTestTimer; // Timer for test app events
+#endif
 } AppSync_t;
 
 /* Application resources (static allocation buffers) */
@@ -190,8 +183,6 @@ typedef struct
     StaticTask_t xRFDataRxTaskBuffer;
     StaticTask_t xCmdTaskBuffer;
     StaticTask_t xTelemetryTaskBuffer;
-    StaticTask_t xUIInputTaskBuffer;
-    StaticTask_t xDisplayTaskBuffer;
     /* Proper alignment for the TMS570 MPU should be ensured by defining aligned stack
      * types or using compiler attributes. It typically requires regions to be aligned
      * to their size, so stacks and local data arrays should be aligned to their total
@@ -204,15 +195,16 @@ typedef struct
     StackType_t xRFDataRxStack[STACK_RF_DATA_RX];
     StackType_t xCmdStack[STACK_CMD];
     StackType_t xTelemetryStack[STACK_TELEMETRY];
-    StackType_t xUIInputStack[STACK_UI_INPUT];
-    StackType_t xDisplayStack[STACK_DISPLAY];
 
     /* RTOS objects */
     StaticEventGroup_t xSysEventsBuffer;
     StaticSemaphore_t xDataMutexBuffer;
-    StaticTimer_t xInitTimerBuffer;
-    StaticTimer_t xPeriodicTimerBuffer;
+    // StaticTimer_t xInitTimerBuffer;
+    // StaticTimer_t xPeriodicTimerBuffer;
     StaticTimer_t xTxTimeoutTimerBuffer;
+#ifdef ENABLE_APP_TEST
+    StaticTimer_t xAppTestTimerBuffer;
+#endif
 } AppResources_t;
 
 /* Data struct for local copies */
@@ -224,8 +216,6 @@ typedef struct
     motor_data_t motor1_data;
     motor_data_t motor2_data;
     drivers_status_data_t drivers_status_data;
-    buttons_data_t buttons_data;
-    on_board_status_data_t on_board_status_data;
 } AppData_t;
 
 /* Unified app context */
@@ -276,13 +266,6 @@ extern "C"
 #endif
 
 /* ---------------------------------------------------------------------------------- *
- * Variables with global scope                                                        *
- * ---------------------------------------------------------------------------------- */
-
-/* Global display object */
-Bridgetek_EVE2 display_data;
-
-/* ---------------------------------------------------------------------------------- *
  * Prototypes for private functions with file level scope                             *
  * ---------------------------------------------------------------------------------- */
 
@@ -324,8 +307,6 @@ static void vAppCreateObjects(AppContext_t *pxCtx);
  * - RF Data Receive task: receives and dispatches RF data
  * - Command task: processes and validates received commands
  * - Telemetry task: collects vehicle telemetry, packs it and enqueues for transmission
- * - UI Input task: processes touch input and updates dashboard state
- * - Display task: renders dashboard data to the screen
  */
 static portTASK_FUNCTION_PROTO(vInitTask, pvParameters);
 static portTASK_FUNCTION_PROTO(vDataUpdateTask, pvParameters);
@@ -334,8 +315,6 @@ static portTASK_FUNCTION_PROTO(vDriversFSMTask, pvParameters);
 static portTASK_FUNCTION_PROTO(vRFDataRxTask, pvParameters);
 static portTASK_FUNCTION_PROTO(vCmdTask, pvParameters);
 static portTASK_FUNCTION_PROTO(vTelemetryTask, pvParameters);
-static portTASK_FUNCTION_PROTO(vUIInputTask, pvParameters);
-static portTASK_FUNCTION_PROTO(vDisplayTask, pvParameters);
 
 // Callbacks ///////////////////////////////////////////////////////////////////////////
 
@@ -345,10 +324,14 @@ static portTASK_FUNCTION_PROTO(vDisplayTask, pvParameters);
  * - Init Timer: startup initializations that require interrupts
  * - Periodic Timer: periodic events
  * - Tx Timeout: telemetry retransmission
+ * - App Test Timer: trigger test app events (if enabled)
  */
-static void vInitTimerCallback(TimerHandle_t xTimer);
-static void vPeriodicTimerCallback(TimerHandle_t xTimer);
+// static void vInitTimerCallback(TimerHandle_t xTimer);
+// static void vPeriodicTimerCallback(TimerHandle_t xTimer);
 static void vTxTimeoutCallback(TimerHandle_t xTimer);
+#ifdef ENABLE_APP_TEST
+static void vAppTestTimerCallback(TimerHandle_t xTimer);
+#endif
 
 /* ---------------------------------------------------------------------------------- *
  * Static variables and constants with file level scope                               *
@@ -426,35 +409,27 @@ void canMessageNotification(canBASE_t *node, uint32 messageBox)
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     EventBits_t xEvent = 0U;
 
-    /* TODO: The DataUpdate task is periodic, so EVT_CAN_x events are not necessary */
-
     /* Set event bits and data flags */
     if (node == CAN_REG)
     {
         switch (messageBox)
         {
         case SENSORS_MAILBOX:
-            sensors_data.new_data = true;
             xEvent = EVT_CAN_SENSORS;
             break;
         case SPEED_MAILBOX:
-            speed_data.new_data = true;
             xEvent = EVT_CAN_SPEED;
             break;
         case MOTOR1_MAILBOX:
-            motor1_data.new_data = true;
             xEvent = EVT_CAN_MOTOR1;
             break;
         case MOTOR2_MAILBOX:
-            motor2_data.new_data = true;
             xEvent = EVT_CAN_MOTOR2;
             break;
         case DRIVERS_STATUS_MAILBOX:
-            drivers_status_data.new_data = true;
             xEvent = EVT_CAN_DRIVERS_STATUS;
             break;
         case DYNAMIC_MAILBOX:
-            dynamic_data.new_data = true;
             xEvent = EVT_CAN_DYNAMIC;
             break;
         default:
@@ -486,12 +461,6 @@ void rtiNotification(uint32 notification)
     /* Signal periodic events */
     switch (notification)
     {
-    case RTI_DATA_UPDATE: // 60Hz
-        xEvent = EVT_PERIODIC_DATA_UPDATE;
-        break;
-    case RTI_SCREEN_UPDATE: // 30Hz
-        xEvent = EVT_PERIODIC_DISPLAY_UPDATE;
-        break;
     case RTI_TELEMETRY_UPDATE: // 50Hz
         xEvent = EVT_PERIODIC_TELEMETRY;
         break;
@@ -586,41 +555,23 @@ static void vAppInitModules(void)
     /* Initialize peripherals */
     canInit();
     gioInit();
-    // rtiInit(); // RTI will be started after scheduler starts
+    rtiInit(); // RTI will be started after scheduler starts
     sciInit();
-    spiInit();
 
     /* Initialize EEPROM/Flash */
     TI_Fee_Init();
     while (TI_Fee_GetStatus(0) != IDLE)
         TI_Fee_MainFunction();
 
-    /* Initialize display */
-    display_data.setup(WQVGA);
-    display_data.Init();
-
-    /* Try restoring touch + debug calibration from EEPROM */
-    if (!loadCalibration(display_data))
-    {
-        /* If not found, perform fresh touch calibration */
-        eve_calibrate(display_data);
-        saveCalibration(display_data);
-    }
-
-    /* Initialize data and dashboard structures */
-    init_data();
-    test_main_ecu_init();
-    init_dashboard(&dashboard_data);
-
     /* Enable peripheral callbacks */
     canEnableErrorNotification(CAN_REG);
     canEnableStatusChangeNotification(CAN_REG);
-    rtiEnableNotification(RTI_SCREEN_UPDATE);
-    rtiEnableNotification(RTI_DATA_UPDATE);
     rtiEnableNotification(RTI_TELEMETRY_UPDATE);
     // sciEnableNotification(SCI_REG, SCI_TX_INT | SCI_RX_INT);
-    sciEnableNotification(SCI_REG, 0); // Enabled in HALCoGen
-    // spiEnableNotification(SPI_REG, 0);
+
+#ifdef ENABLE_APP_TEST
+    vTestAppInit();
+#endif
 }
 
 /**
@@ -629,6 +580,8 @@ static void vAppInitModules(void)
  */
 static void vAppInitModulesWithInterrupts(void)
 {
+    rtiStartCounter(rtiCOUNTER_BLOCK1); // Start RTI to generate periodic events
+
     /* Add initializations as needed */
 }
 
@@ -710,26 +663,6 @@ static void vAppCreateTasks(AppContext_t *pxCtx)
         pxRes->xTelemetryStack,
         &pxRes->xTelemetryTaskBuffer);
     configASSERT(pxTasks->xTelemetryTask != NULL);
-
-    // pxTasks->xUIInputTask = xTaskCreateStatic(
-    //     vUIInputTask,
-    //     "UIInput",
-    //     STACK_UI_INPUT,
-    //     (void *)pxCtx,
-    //     PRIO_UI_INPUT,
-    //     pxRes->xUIInputStack,
-    //     &pxRes->xUIInputTaskBuffer);
-    // configASSERT(pxTasks->xUIInputTask != NULL);
-
-    pxTasks->xDisplayTask = xTaskCreateStatic(
-        vDisplayTask,
-        "Display",
-        STACK_DISPLAY,
-        (void *)pxCtx,
-        PRIO_DISPLAY,
-        pxRes->xDisplayStack,
-        &pxRes->xDisplayTaskBuffer);
-    configASSERT(pxTasks->xDisplayTask != NULL);
 }
 
 static void vAppCreateObjects(AppContext_t *pxCtx)
@@ -760,6 +693,13 @@ static void vAppCreateObjects(AppContext_t *pxCtx)
     /* Timer for telemetry transmission timeout */
     pxSync->xTxTimeoutTimer = xTimerCreate("TxTimeoutTimer", pdMS_TO_TICKS(5), pdFALSE, NULL, vTxTimeoutCallback);
     configASSERT(pxSync->xTxTimeoutTimer != NULL);
+
+#ifdef ENABLE_APP_TEST
+    /* Timer for test app events */
+    pxSync->xAppTestTimer = xTimerCreate("AppTestTimer", pdMS_TO_TICKS(100), pdTRUE, NULL, vAppTestTimerCallback);
+    configASSERT(pxSync->xAppTestTimer != NULL);
+    xTimerStart(pxSync->xAppTestTimer, 0);
+#endif
 }
 
 // Tasks ///////////////////////////////////////////////////////////////////////////////
@@ -779,44 +719,52 @@ static portTASK_FUNCTION(vDataUpdateTask, pvParameters)
 {
     AppContext_t *pxCtx = (AppContext_t *)pvParameters;
     AppSync_t *pxSync = pxCtx->xSync;
-    AppData_t *pxData = pxCtx->xData;
+    AppData_t *pxData = pxCtx->xData, xLocalData;
     EventBits_t uxBits;
 
     __FOREVER__
     {
-        /* Wait for 60Hz periodic event */
+        /* Wait for data update event */
         uxBits = xEventGroupWaitBits(
             pxSync->xSysEvents,
-            EVT_PERIODIC_DATA_UPDATE,
+            EVT_DATA_UPDATE,
             pdTRUE,  // Clear bits after return
             pdFALSE, // Wait for any bit
             portMAX_DELAY);
 
-        if ((uxBits & EVT_PERIODIC_DATA_UPDATE) != 0U)
+        if ((uxBits & EVT_DATA_UPDATE) != 0U)
         {
-            /* Read new frames and update all data structures */
-            update_data();
+            /* Read new frames and update local fields */
+            if (uxBits & EVT_CAN_SENSORS)
+                canGetData(canREG1, SENSORS_MAILBOX, xLocalData.sensors_data.raw);
+            if (uxBits & EVT_CAN_SPEED)
+                canGetData(canREG1, SPEED_MAILBOX, xLocalData.speed_data.raw);
+            if (uxBits & EVT_CAN_MOTOR1)
+                canGetData(canREG1, MOTOR1_MAILBOX, xLocalData.motor1_data.raw);
+            if (uxBits & EVT_CAN_MOTOR2)
+                canGetData(canREG1, MOTOR2_MAILBOX, xLocalData.motor2_data.raw);
+            if (uxBits & EVT_CAN_DRIVERS_STATUS)
+                canGetData(canREG1, DRIVERS_STATUS_MAILBOX, xLocalData.drivers_status_data.raw);
+            if (uxBits & EVT_CAN_DYNAMIC)
+                canGetData(canREG1, DYNAMIC_MAILBOX, xLocalData.dynamic_data.raw);
 
-            /* Update dashboard buffers */
-            update_dashboard_data(&dashboard_data);
-
-            /* Handle touch input */
-            ui_handle_touch(display_data, &dashboard_data);
-
-            /* Update local copy */
+            /* Update global data */
             if (xSemaphoreTake(pxSync->xDataMutex, pdMS_TO_TICKS(10)) == pdTRUE)
             {
-                /* Tasks need data that is mutex locked for consistency, so to avoid
-                 * blocking update_data() and losing frames, local copies are used.
-                 */
-                pxData->sensors_data = sensors_data;
-                pxData->speed_data = speed_data;
-                pxData->dynamic_data = dynamic_data;
-                pxData->motor1_data = motor1_data;
-                pxData->motor2_data = motor2_data;
-                pxData->drivers_status_data = drivers_status_data;
-                pxData->buttons_data = buttons_data;
-                pxData->on_board_status_data = on_board_status_data;
+                if (uxBits & EVT_CAN_SENSORS)
+                    pxData->sensors_data = xLocalData.sensors_data;
+                if (uxBits & EVT_CAN_SPEED)
+                    pxData->speed_data = xLocalData.speed_data;
+                if (uxBits & EVT_CAN_DYNAMIC)
+                    pxData->dynamic_data = xLocalData.dynamic_data;
+                if (uxBits & EVT_CAN_MOTOR1)
+                    pxData->motor1_data = xLocalData.motor1_data;
+                if (uxBits & EVT_CAN_MOTOR2)
+                    pxData->motor2_data = xLocalData.motor2_data;
+                if (uxBits & EVT_CAN_DRIVERS_STATUS)
+                    pxData->drivers_status_data = xLocalData.drivers_status_data;
+                if (uxBits & EVT_CAN_DYNAMIC)
+                    pxData->dynamic_data = xLocalData.dynamic_data;
 
                 xSemaphoreGive(pxSync->xDataMutex);
                 xEventGroupSetBits(pxSync->xSysEvents, EVT_NEW_DATA);
@@ -868,6 +816,8 @@ static portTASK_FUNCTION(vRulesTask, pvParameters)
         /////////////////////////////////////////////
         // TODO: Placeholder for compliance checks //
         /////////////////////////////////////////////
+
+        /* TODO: Send rulebreaks via CAN */
     }
 
     vTaskDelete(NULL);
@@ -903,7 +853,6 @@ static portTASK_FUNCTION(vDriversFSMTask, pvParameters)
         /* Local copy of control-related state */
         if (xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
         {
-            xLocalData.drive_enabled = pxData->buttons_data.values.drive_enabled;
             xLocalData.motor1_voltage = pxData->motor1_data.values.motor_voltage;
             xLocalData.motor1_current = pxData->motor1_data.values.motor_current;
             xLocalData.motor2_voltage = pxData->motor2_data.values.motor_voltage;
@@ -1219,70 +1168,28 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
     vTaskDelete(NULL);
 }
 
-static portTASK_FUNCTION(vUIInputTask, pvParameters)
-{
-    (void)pvParameters;
-
-    __FOREVER__
-    {
-        /* This is currently done in the DataUpdate task */
-
-        ////////////////////////////////////////////
-        // TODO: Placeholder for input processing //
-        ////////////////////////////////////////////
-    }
-
-    vTaskDelete(NULL);
-}
-
-static portTASK_FUNCTION(vDisplayTask, pvParameters)
-{
-    AppContext_t *pxCtx = (AppContext_t *)pvParameters;
-    AppSync_t *pxSync = pxCtx->xSync;
-    EventBits_t uxBits;
-
-    __FOREVER__
-    {
-        /* Wait for 30Hz periodic event */
-        uxBits = xEventGroupWaitBits(
-            pxSync->xSysEvents,
-            EVT_PERIODIC_DISPLAY_UPDATE,
-            pdTRUE,  // Clear bits after return
-            pdFALSE, // Wait for any bit
-            portMAX_DELAY);
-
-        if ((uxBits & EVT_PERIODIC_DISPLAY_UPDATE) != 0U)
-        {
-            /* Update display rendering */
-            update_dashboard_draw(display_data, &dashboard_data);
-        }
-    }
-
-    vTaskDelete(NULL);
-}
-
 // Callbacks ///////////////////////////////////////////////////////////////////////////
 
-static void vInitTimerCallback(TimerHandle_t xTimer)
-{
-    configASSERT(xTimer != NULL);
+// static void vInitTimerCallback(TimerHandle_t xTimer)
+// {
+//     configASSERT(xTimer != NULL);
 
-    /* Initialize modules that require interrupts */
-    vAppInitModulesWithInterrupts();
+//     /* Initialize modules that require interrupts */
+//     vAppInitModulesWithInterrupts();
 
-    /* Delete self */
-    xTimerDelete(xTimer, 0);
-}
+//     /* Delete self */
+//     xTimerDelete(xTimer, 0);
+// }
 
-static void vPeriodicTimerCallback(TimerHandle_t xTimer)
-{
-    configASSERT(xTimer != NULL);
+// static void vPeriodicTimerCallback(TimerHandle_t xTimer)
+// {
+//     configASSERT(xTimer != NULL);
 
-    /* This callback can be used to signal periodic events if RTI notifications are not
-     * available. Multiple timers with different periods can be implemented with the
-     * same callback by using their pvTimerID parameter to identify which timer expired.
-     */
-}
+//     /* This callback can be used to signal periodic events if RTI notifications are not
+//      * available. Multiple timers with different periods can be implemented with the
+//      * same callback by using their pvTimerID parameter to identify which timer expired.
+//      */
+// }
 
 static void vTxTimeoutCallback(TimerHandle_t xTimer)
 {
@@ -1290,3 +1197,12 @@ static void vTxTimeoutCallback(TimerHandle_t xTimer)
 
     xEventGroupSetBits(xAppContext.xSync->xSysEvents, EVT_TELEMETRY_NACK);
 }
+
+#ifdef ENABLE_APP_TEST
+static void vAppTestTimerCallback(TimerHandle_t xTimer)
+{
+    configASSERT(xTimer != NULL);
+
+    vTestAppPeriodic();
+}
+#endif

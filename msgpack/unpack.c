@@ -344,15 +344,15 @@ static inline void init_count(void* buffer)
 static inline void decr_count(void* buffer)
 {
     // atomic if(--*(_msgpack_atomic_counter_t*)buffer == 0) { free(buffer); }
-    if(_msgpack_sync_decr_and_fetch((volatile _msgpack_atomic_counter_t*)buffer) == 0) {
-        free(buffer);
-    }
+    // if(_msgpack_sync_decr_and_fetch((volatile _msgpack_atomic_counter_t*)buffer) == 0) {
+    //     free(buffer);
+    // }
 }
 
 static inline void incr_count(void* buffer)
 {
     // atomic ++*(_msgpack_atomic_counter_t*)buffer;
-    _msgpack_sync_incr_and_fetch((volatile _msgpack_atomic_counter_t*)buffer);
+    // _msgpack_sync_incr_and_fetch((volatile _msgpack_atomic_counter_t*)buffer);
 }
 
 static inline _msgpack_atomic_counter_t get_count(void* buffer)

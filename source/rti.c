@@ -87,7 +87,7 @@ void rtiInit(void)
     rtiREG1->CAPCTRL = 0U | 0U;
 
     /** - Setup input source compare 0-3 */
-    rtiREG1->COMPCTRL = 0x00001000U | 0x00000100U | 0x00000000U | 0x00000000U;
+    rtiREG1->COMPCTRL = 0x00001000U | 0x00000100U | 0x00000010U | 0x00000000U;
 
     /** - Reset up counter 0 */
     rtiREG1->CNT[0U].UCx = 0x00000000U;
@@ -99,7 +99,7 @@ void rtiInit(void)
     *     - 0x00000000: Divide by 2^32
     *     - 0x00000001-0xFFFFFFFF: Divide by (CPUC0 + 1)
     */
-    rtiREG1->CNT[0U].CPUCx = 7U;
+    rtiREG1->CNT[0U].CPUCx = 1U;
 
     /** - Reset up counter 1 */
     rtiREG1->CNT[1U].UCx = 0x00000000U;
@@ -111,31 +111,31 @@ void rtiInit(void)
     *     - 0x00000000: Divide by 2^32
     *     - 0x00000001-0xFFFFFFFF: Divide by (CPUC1 + 1)
     */
-    rtiREG1->CNT[1U].CPUCx = 7U;
+    rtiREG1->CNT[1U].CPUCx = 79U;
 
     /** - Setup compare 0 value. This value is compared with selected free running counter. */
-    rtiREG1->CMP[0U].COMPx = 1U;
+    rtiREG1->CMP[0U].COMPx = 40000U;
 
     /** - Setup update compare 0 value. This value is added to the compare 0 value on each compare match. */
-    rtiREG1->CMP[0U].UDCPx = 1U;
+    rtiREG1->CMP[0U].UDCPx = 40000U;
 
     /** - Setup compare 1 value. This value is compared with selected free running counter. */
-    rtiREG1->CMP[1U].COMPx = 333330U;
+    rtiREG1->CMP[1U].COMPx = 33333U;
 
     /** - Setup update compare 1 value. This value is added to the compare 1 value on each compare match. */
-    rtiREG1->CMP[1U].UDCPx = 333330U;
+    rtiREG1->CMP[1U].UDCPx = 33333U;
 
     /** - Setup compare 2 value. This value is compared with selected free running counter. */
-    rtiREG1->CMP[2U].COMPx = 166660U;
+    rtiREG1->CMP[2U].COMPx = 16666U;
 
     /** - Setup update compare 2 value. This value is added to the compare 2 value on each compare match. */
-    rtiREG1->CMP[2U].UDCPx = 166660U;
+    rtiREG1->CMP[2U].UDCPx = 16666U;
 
     /** - Setup compare 3 value. This value is compared with selected free running counter. */
-    rtiREG1->CMP[3U].COMPx = 150000U;
+    rtiREG1->CMP[3U].COMPx = 15000U;
 
     /** - Setup update compare 3 value. This value is added to the compare 3 value on each compare match. */
-    rtiREG1->CMP[3U].UDCPx = 150000U;
+    rtiREG1->CMP[3U].UDCPx = 15000U;
 
     /** - Clear all pending interrupts */
     rtiREG1->INTFLAG = 0x0007000FU;
