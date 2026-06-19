@@ -13,11 +13,6 @@
  * functions to use the MPU wrappers.
  */
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
 /* FreeRTOS includes */
 #include "FreeRTOS.h"
 #include "os_task.h"
@@ -33,16 +28,13 @@ extern "C"
 #include "ti_fee.h"
 
 /* Application includes */
+#include "data.h"
+#include "test/test_App.h"
+
+/* External libraries */
 #include "cobs/cobs.h"
 #include "msgpack/msgpack.h"
 #include "xbee/xbee.h"
-
-#ifdef __cplusplus
-}
-#endif
-
-#include "data.h"
-#include "test/test_App.h"
 
 /* ---------------------------------------------------------------------------------- *
  * Macro constants and definitions                                                    *
@@ -237,39 +229,30 @@ typedef struct
  * Function prototypes with global scope                                              *
  * ---------------------------------------------------------------------------------- */
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
+/**
+ * @brief Initialize the application
+ * @note This function is called once at the beginning of the main program
+ */
+void vAppInit(void);
 
-    /**
-     * @brief Initialize the application
-     * @note This function is called once at the beginning of the main program
-     */
-    void vAppInit(void);
+/**
+ * @brief Run the application
+ * @note This function is called constantly in an infinite loop
+ */
+void vAppRun(void);
 
-    /**
-     * @brief Run the application
-     * @note This function is called constantly in an infinite loop
-     */
-    void vAppRun(void);
-
-    /**
-     * @brief Provide static memory for the FreeRTOS idle and timer tasks
-     * @param ppx_TaskTCBBuffer Pointer to receive the TCB buffer
-     * @param ppx_TaskStackBuffer Pointer to receive the stack buffer
-     * @param pul_TaskStackSize Pointer to receive the stack size in words
-     */
-    void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
-                                       StackType_t **ppxIdleTaskStackBuffer,
-                                       uint32_t *pulIdleTaskStackSize);
-    void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
-                                        StackType_t **ppxTimerTaskStackBuffer,
-                                        uint32_t *pulTimerTaskStackSize);
-
-#ifdef __cplusplus
-}
-#endif
+/**
+ * @brief Provide static memory for the FreeRTOS idle and timer tasks
+ * @param ppx_TaskTCBBuffer Pointer to receive the TCB buffer
+ * @param ppx_TaskStackBuffer Pointer to receive the stack buffer
+ * @param pul_TaskStackSize Pointer to receive the stack size in words
+ */
+void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
+                                   StackType_t **ppxIdleTaskStackBuffer,
+                                   uint32_t *pulIdleTaskStackSize);
+void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
+                                    StackType_t **ppxTimerTaskStackBuffer,
+                                    uint32_t *pulTimerTaskStackSize);
 
 /* ---------------------------------------------------------------------------------- *
  * Prototypes for private functions with file level scope                             *
