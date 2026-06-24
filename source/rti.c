@@ -120,22 +120,22 @@ void rtiInit(void)
     rtiREG1->CMP[0U].UDCPx = 40000U;
 
     /** - Setup compare 1 value. This value is compared with selected free running counter. */
-    rtiREG1->CMP[1U].COMPx = 33333U;
+    rtiREG1->CMP[1U].COMPx = 20000U;
 
     /** - Setup update compare 1 value. This value is added to the compare 1 value on each compare match. */
-    rtiREG1->CMP[1U].UDCPx = 33333U;
+    rtiREG1->CMP[1U].UDCPx = 20000U;
 
     /** - Setup compare 2 value. This value is compared with selected free running counter. */
-    rtiREG1->CMP[2U].COMPx = 16666U;
+    rtiREG1->CMP[2U].COMPx = 0U;
 
     /** - Setup update compare 2 value. This value is added to the compare 2 value on each compare match. */
-    rtiREG1->CMP[2U].UDCPx = 16666U;
+    rtiREG1->CMP[2U].UDCPx = 0U;
 
     /** - Setup compare 3 value. This value is compared with selected free running counter. */
-    rtiREG1->CMP[3U].COMPx = 15000U;
+    rtiREG1->CMP[3U].COMPx = 0U;
 
     /** - Setup update compare 3 value. This value is added to the compare 3 value on each compare match. */
-    rtiREG1->CMP[3U].UDCPx = 15000U;
+    rtiREG1->CMP[3U].UDCPx = 0U;
 
     /** - Clear all pending interrupts */
     rtiREG1->INTFLAG = 0x0007000FU;

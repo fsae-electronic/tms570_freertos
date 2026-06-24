@@ -1,6 +1,7 @@
 /**
- * @file App.cpp
+ * @file App.c
  * @brief Application functions
+ * @authors Agustin Fisher, Agustin Solari Raigoso, Valentin U. Vieira
  */
 
 /* ---------------------------------------------------------------------------------- *
@@ -69,53 +70,64 @@
 // Event flags (32 bits) ///////////////////////////////////////////////////////////////
 
 /* CAN mailbox updates */
-#define EVT_CAN_FADC1 (1 << 0)
-#define EVT_CAN_FADC2 (1 << 1)
-#define EVT_CAN_RADC1 (1 << 2)
-#define EVT_CAN_RADC2 (1 << 3)
-#define EVT_CAN_DRV1 (1 << 4)
-#define EVT_CAN_DRV2 (1 << 5)
+#define EVT_CAN_TPS (1 << 0)
+#define EVT_CAN_FRONT (1 << 1)
+#define EVT_CAN_CURRENT (1 << 2)
+#define EVT_CAN_REAR (1 << 3)
+#define EVT_CAN_HEARTBEAT (1 << 4)
+#define EVT_CAN_DRV_STATUS1 (1 << 5)
+#define EVT_CAN_DRV_STATUS2 (1 << 6)
+#define EVT_CAN_MOTOR1 (1 << 7)
+#define EVT_CAN_MOTOR2 (1 << 8)
+#define EVT_CAN_DRV1 (1 << 9)
+#define EVT_CAN_DRV2 (1 << 10)
 /* RF data reception */
-#define EVT_SCI_RX_READY (1 << 10)
-#define EVT_SCI_TX_READY (1 << 11)
-#define EVT_SCI_CMD (1 << 12)
-#define EVT_SCI_TELEMETRY_ACK (1 << 13)
-#define EVT_TELEMETRY_NACK (1 << 14)
+#define EVT_SCI_RX_READY (1 << 11)
+#define EVT_SCI_TX_READY (1 << 12)
+#define EVT_SCI_CMD (1 << 13)
+#define EVT_SCI_TELEMETRY_ACK (1 << 14)
+#define EVT_TELEMETRY_NACK (1 << 15)
 /* Data ready for processing */
-#define EVT_NEW_DATA (EVT_CAN_FADC1 | EVT_CAN_FADC2 | EVT_CAN_RADC1 | EVT_CAN_RADC2 | EVT_CAN_DRV1 | EVT_CAN_DRV2)
-#define EVT_DATA_UPDATE (1 << 15)
-#define EVT_DATA_APPROVED (1 << 16)
+#define EVT_NEW_DATA (EVT_CAN_TPS | EVT_CAN_FRONT | EVT_CAN_CURRENT | EVT_CAN_REAR | EVT_CAN_HEARTBEAT | EVT_CAN_DRV_STATUS1 | EVT_CAN_DRV_STATUS2 | EVT_CAN_MOTOR1 | EVT_CAN_MOTOR2 | EVT_CAN_DRV1 | EVT_CAN_DRV2)
+#define EVT_DATA_UPDATE (1 << 16)
+#define EVT_DATA_APPROVED (1 << 17)
 /* Task ready flags */
 #define EVT_CMD_READY (1 << 20)
 #define EVT_TELEMETRY_READY (1 << 21)
 /* Periodic events */
 #define EVT_PERIODIC_TELEMETRY (1 << 25)
+/* Rule break events */
+#define EVT_APPS_RULE_BREAK (1 << 26)
+#define EVT_BSE_RULE_BREAK (1 << 27)
+// #define EVT_BP_RULE_BREAK (1 << 28)
+// #define STATE_SHUTDOWN (1 << 32) // Drivers state indicating shut down caused by an implausibility check
 
 // CAN mailboxes ///////////////////////////////////////////////////////////////////////
 
 /* ADC2CAN */
-#define FADC1_MAILBOX canMESSAGE_BOX1 // Rx
-#define FADC2_MAILBOX canMESSAGE_BOX2 // Rx
-#define RADC1_MAILBOX canMESSAGE_BOX3 // Rx
-#define RADC2_MAILBOX canMESSAGE_BOX4 // Rx
+#define TPS_MAILBOX canMESSAGE_BOX1     // Rx
+#define FRONT_MAILBOX canMESSAGE_BOX2   // Rx
+#define CURRENT_MAILBOX canMESSAGE_BOX3 // Rx
+#define REAR_MAILBOX canMESSAGE_BOX4    // Rx
 /* Main ECU */
-#define DRV_STATUS_MAILBOX canMESSAGE_BOX5 // Tx
-#define ERR_MSG_MAILBOX canMESSAGE_BOX6    // Tx
-#define CALIB_MAILBOX canMESSAGE_BOX9      // Tx, base for 0x50n messages
+#define MAIN_ECU_MAILBOX canMESSAGE_BOX5 // Tx
+#define CALIB_MAILBOX canMESSAGE_BOX6    // Tx
 /* Drivers */
-#define DRV1_MAILBOX canMESSAGE_BOX7      // Rx
-#define DRV2_MAILBOX canMESSAGE_BOX8      // Rx
-#define DRV_CTRL_MAILBOX canMESSAGE_BOX17 // Tx
+#define HEARTBEAT_MAILBOX canMESSAGE_BOX7    // Rx
+#define DRV_CTRL1_MAILBOX canMESSAGE_BOX8    // Tx
+#define DRV_CTRL2_MAILBOX canMESSAGE_BOX9    // Tx
+#define DRV_STATUS1_MAILBOX canMESSAGE_BOX10 // Rx
+#define DRV_STATUS2_MAILBOX canMESSAGE_BOX11 // Rx
+#define MOTOR1_MAILBOX canMESSAGE_BOX12      // Rx
+#define MOTOR2_MAILBOX canMESSAGE_BOX13      // Rx
+#define DRV1_MAILBOX canMESSAGE_BOX14        // Rx
+#define DRV2_MAILBOX canMESSAGE_BOX15        // Rx
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
 /* Peripheral registers */
 #define CAN_REG canREG1
 #define SCI_REG sciREG
-
-/* Clock and update rates */
-// #define CLOCK_RTI_HZ 1000000                       // 1MHz
-// #define TELEMETRY_UPDATE_TICKS (CLOCK_RTI_HZ / 50) // 50Hz
 
 /* RTI is blocked by default (this FreeRTOS port uses RTI Counter 0 Compare 0 to
  * generate the system tick). In order to use it, rti.c has to be manually added to the
@@ -134,9 +146,33 @@
 #define CMD_ID 0x01
 #define TELEMETRY_ACK_ID 0x7E
 
+/* Implausibility checks */
+#define RB_APPS_THRESHOLD 10         // Max accelerator pedal travel deviation allowed
+#define RB_APPS_TIMEOUT_MS 100       // Time window to consider APPS implausibility valid
+#define RB_BSE_TIMEOUT_MS 100        // Time window to consider BSE implausibility valid
+#define RB_BP_BSE_THRESHOLD 90       // Max brake pedal travel allowed without mechanical actuation
+#define RB_BP_APPS_HIGH_THRESHOLD 25 // Max accelerator pedal travel allowed with mechanical brakes engaged
+#define RB_BP_APPS_LOW_THRESHOLD 5   // Max accelerator pedal travel allowed to release the shut down
+
 /* ---------------------------------------------------------------------------------- *
  * Enumerations, structures and typedefs                                              *
  * ---------------------------------------------------------------------------------- */
+
+typedef enum
+{
+    APP_RB_NONE,
+    APP_RB_APPS,
+    APP_RB_BSE,
+    APP_RB_BP
+} AppRuleBreak_t;
+
+typedef enum
+{
+    APP_STATE_INIT,
+    APP_STATE_RUNNING,
+    APP_STATE_SOFT_SHUTDOWN,
+    APP_STATE_HARD_SHUTDOWN
+} AppState_t;
 
 /* Application tasks */
 typedef struct
@@ -162,9 +198,11 @@ typedef struct
      * as short as possible.
      */
     SemaphoreHandle_t xDataMutex;
-    // TimerHandle_t xInitTimer;      // Post scheduler initializations
-    // TimerHandle_t xPeriodicTimer;  // Periodic events
-    TimerHandle_t xTxTimeoutTimer; // Telemetry transmission timeout
+    // TimerHandle_t xInitTimer;       // Post scheduler initializations
+    // TimerHandle_t xPeriodicTimer;   // Periodic events
+    TimerHandle_t xTxTimeoutTimer;     // Telemetry transmission timeout
+    TimerHandle_t xAPPSRuleBreakTimer; // Timer to track APPS rule breaks
+    TimerHandle_t xBSERuleBreakTimer;  // Timer to track BSE rule breaks
 #ifdef ENABLE_APP_TEST
     TimerHandle_t xAppTestTimer; // Timer for test app events
 #endif
@@ -200,6 +238,8 @@ typedef struct
     // StaticTimer_t xInitTimerBuffer;
     // StaticTimer_t xPeriodicTimerBuffer;
     StaticTimer_t xTxTimeoutTimerBuffer;
+    StaticTimer_t xAPPSRuleBreakTimerBuffer;
+    StaticTimer_t xBSERuleBreakTimerBuffer;
 #ifdef ENABLE_APP_TEST
     StaticTimer_t xAppTestTimerBuffer;
 #endif
@@ -208,17 +248,28 @@ typedef struct
 /* Data struct for local copies */
 typedef struct
 {
-    DataFADC1_t xFADC1;
-    DataFADC2_t xFADC2;
-    DataRADC1_t xRADC1;
-    DataRADC2_t xRADC2;
-    DataDrv1_t xDrv1;
-    DataDrv2_t xDrv2;
+    DataTPS_t xTPS;
+    DataFront_t xFront;
+    DataCurrent_t xCurrent;
+    DataRear_t xRear;
+    DataMainECU_t xMainECU;
+    DataCalib_t xCalib;
+    DataHeartbeat_t xHeartbeat;
+    DataDrvCtrl_t xDrvCtrl1;
+    DataDrvCtrl_t xDrvCtrl2;
+    DataDrvStatus_t xDrvStatus1;
+    DataDrvStatus_t xDrvStatus2;
+    DataMotor_t xMotor1;
+    DataMotor_t xMotor2;
+    DataDrv_t xDrv1;
+    DataDrv_t xDrv2;
 } AppData_t;
 
 /* Unified app context */
 typedef struct
 {
+    AppRuleBreak_t xRuleBreak;
+    AppState_t xState;
     AppResources_t *xResources;
     AppTasks_t *xTasks;
     AppSync_t *xSync;
@@ -313,11 +364,14 @@ static portTASK_FUNCTION_PROTO(vTelemetryTask, pvParameters);
  * - Init Timer: startup initializations that require interrupts
  * - Periodic Timer: periodic events
  * - Tx Timeout: telemetry retransmission
+ * - APPS Rule Break Timer: track APPS implausibilities
  * - App Test Timer: trigger test app events (if enabled)
  */
 // static void vInitTimerCallback(TimerHandle_t xTimer);
 // static void vPeriodicTimerCallback(TimerHandle_t xTimer);
 static void vTxTimeoutCallback(TimerHandle_t xTimer);
+static void vAPPSRuleBreakTimerCallback(TimerHandle_t xTimer);
+static void vBSERuleBreakTimerCallback(TimerHandle_t xTimer);
 #ifdef ENABLE_APP_TEST
 static void vAppTestTimerCallback(TimerHandle_t xTimer);
 #endif
@@ -331,6 +385,8 @@ static AppTasks_t xAppTasks;
 static AppSync_t xAppSync;
 static AppData_t xAppData;
 static AppContext_t xAppContext = {
+    APP_RB_NONE,
+    APP_STATE_INIT,
     &xAppResources,
     &xAppTasks,
     &xAppSync,
@@ -370,6 +426,8 @@ void vAppInit(void)
     // vAppInitModulesWithInterrupts();
     // portDISABLE_INTERRUPTS();
 
+    xAppContext.xState = APP_STATE_RUNNING;
+
     /* Start the FreeRTOS scheduler */
     vTaskStartScheduler();
 }
@@ -403,17 +461,32 @@ void canMessageNotification(canBASE_t *node, uint32 messageBox)
     {
         switch (messageBox)
         {
-        case FADC1_MAILBOX:
-            xEvent = EVT_CAN_FADC1;
+        case TPS_MAILBOX:
+            xEvent = EVT_CAN_TPS;
             break;
-        case FADC2_MAILBOX:
-            xEvent = EVT_CAN_FADC2;
+        case FRONT_MAILBOX:
+            xEvent = EVT_CAN_FRONT;
             break;
-        case RADC1_MAILBOX:
-            xEvent = EVT_CAN_RADC1;
+        case CURRENT_MAILBOX:
+            xEvent = EVT_CAN_CURRENT;
             break;
-        case RADC2_MAILBOX:
-            xEvent = EVT_CAN_RADC2;
+        case REAR_MAILBOX:
+            xEvent = EVT_CAN_REAR;
+            break;
+        case HEARTBEAT_MAILBOX:
+            xEvent = EVT_CAN_HEARTBEAT;
+            break;
+        case DRV_STATUS1_MAILBOX:
+            xEvent = EVT_CAN_DRV_STATUS1;
+            break;
+        case DRV_STATUS2_MAILBOX:
+            xEvent = EVT_CAN_DRV_STATUS2;
+            break;
+        case MOTOR1_MAILBOX:
+            xEvent = EVT_CAN_MOTOR1;
+            break;
+        case MOTOR2_MAILBOX:
+            xEvent = EVT_CAN_MOTOR2;
             break;
         case DRV1_MAILBOX:
             xEvent = EVT_CAN_DRV1;
@@ -670,22 +743,54 @@ static void vAppCreateObjects(AppContext_t *pxCtx)
     configASSERT(pxSync->xDataMutex != NULL);
 
     /* Timer that starts after vTaskStartScheduler (interrupts enabled) */
-    // pxSync->xInitTimer = xTimerCreate("InitTimer", 1, pdFALSE, NULL, vInitTimerCallback);
+    // pxSync->xInitTimer = xTimerCreate("InitTimer",
+    //                                   1,
+    //                                   pdFALSE,
+    //                                   NULL,
+    //                                   vInitTimerCallback);
     // configASSERT(pxSync->xInitTimer != NULL);
     // xTimerStart(pxSync->xInitTimer, 0);
 
     /* Timer for periodic events if RTI notifications are not used */
-    // pxSync->xPeriodicTimer = xTimerCreate("PeriodicTimer", pdMS_TO_TICKS(10), pdTRUE, NULL, vPeriodicTimerCallback);
+    // pxSync->xPeriodicTimer = xTimerCreate("PeriodicTimer",
+    //                                       pdMS_TO_TICKS(10),
+    //                                       pdTRUE,
+    //                                       NULL,
+    //                                       vPeriodicTimerCallback);
     // configASSERT(pxSync->xPeriodicTimer != NULL);
     // xTimerStart(pxSync->xPeriodicTimer, 0);
 
     /* Timer for telemetry transmission timeout */
-    pxSync->xTxTimeoutTimer = xTimerCreate("TxTimeoutTimer", pdMS_TO_TICKS(5), pdFALSE, NULL, vTxTimeoutCallback);
+    pxSync->xTxTimeoutTimer = xTimerCreate("TxTimeoutTimer",
+                                           pdMS_TO_TICKS(5),
+                                           pdFALSE,
+                                           NULL,
+                                           vTxTimeoutCallback);
     configASSERT(pxSync->xTxTimeoutTimer != NULL);
+
+    /* Timer to track APPS rule breaks */
+    pxSync->xAPPSRuleBreakTimer = xTimerCreate("APPSRuleBreakTimer",
+                                               pdMS_TO_TICKS(RB_APPS_TIMEOUT_MS),
+                                               pdFALSE,
+                                               NULL,
+                                               vAPPSRuleBreakTimerCallback);
+    configASSERT(pxSync->xAPPSRuleBreakTimer != NULL);
+
+    /* Timer to track BSE rule breaks */
+    pxSync->xBSERuleBreakTimer = xTimerCreate("BSERuleBreakTimer",
+                                              pdMS_TO_TICKS(RB_BSE_TIMEOUT_MS),
+                                              pdFALSE,
+                                              NULL,
+                                              vBSERuleBreakTimerCallback);
+    configASSERT(pxSync->xBSERuleBreakTimer != NULL);
 
 #ifdef ENABLE_APP_TEST
     /* Timer for test app events */
-    pxSync->xAppTestTimer = xTimerCreate("AppTestTimer", pdMS_TO_TICKS(100), pdTRUE, NULL, vAppTestTimerCallback);
+    pxSync->xAppTestTimer = xTimerCreate("AppTestTimer",
+                                         pdMS_TO_TICKS(100),
+                                         pdTRUE,
+                                         NULL,
+                                         vAppTestTimerCallback);
     configASSERT(pxSync->xAppTestTimer != NULL);
     xTimerStart(pxSync->xAppTestTimer, 0);
 #endif
@@ -724,14 +829,24 @@ static portTASK_FUNCTION(vDataUpdateTask, pvParameters)
         if ((uxBits & EVT_DATA_UPDATE) != 0U)
         {
             /* Read new frames and update local fields */
-            if (uxBits & EVT_CAN_FADC1)
-                canGetData(canREG1, FADC1_MAILBOX, xLocalData.xFADC1.raw);
-            if (uxBits & EVT_CAN_FADC2)
-                canGetData(canREG1, FADC2_MAILBOX, xLocalData.xFADC2.raw);
-            if (uxBits & EVT_CAN_RADC1)
-                canGetData(canREG1, RADC1_MAILBOX, xLocalData.xRADC1.raw);
-            if (uxBits & EVT_CAN_RADC2)
-                canGetData(canREG1, RADC2_MAILBOX, xLocalData.xRADC2.raw);
+            if (uxBits & EVT_CAN_TPS)
+                canGetData(canREG1, TPS_MAILBOX, xLocalData.xTPS.raw);
+            if (uxBits & EVT_CAN_FRONT)
+                canGetData(canREG1, FRONT_MAILBOX, xLocalData.xFront.raw);
+            if (uxBits & EVT_CAN_CURRENT)
+                canGetData(canREG1, CURRENT_MAILBOX, xLocalData.xCurrent.raw);
+            if (uxBits & EVT_CAN_REAR)
+                canGetData(canREG1, REAR_MAILBOX, xLocalData.xRear.raw);
+            if (uxBits & EVT_CAN_HEARTBEAT)
+                canGetData(canREG1, HEARTBEAT_MAILBOX, xLocalData.xHeartbeat.raw);
+            if (uxBits & EVT_CAN_DRV_STATUS1)
+                canGetData(canREG1, DRV_STATUS1_MAILBOX, xLocalData.xDrvStatus1.raw);
+            if (uxBits & EVT_CAN_DRV_STATUS2)
+                canGetData(canREG1, DRV_STATUS2_MAILBOX, xLocalData.xDrvStatus2.raw);
+            if (uxBits & EVT_CAN_MOTOR1)
+                canGetData(canREG1, MOTOR1_MAILBOX, xLocalData.xMotor1.raw);
+            if (uxBits & EVT_CAN_MOTOR2)
+                canGetData(canREG1, MOTOR2_MAILBOX, xLocalData.xMotor2.raw);
             if (uxBits & EVT_CAN_DRV1)
                 canGetData(canREG1, DRV1_MAILBOX, xLocalData.xDrv1.raw);
             if (uxBits & EVT_CAN_DRV2)
@@ -740,14 +855,24 @@ static portTASK_FUNCTION(vDataUpdateTask, pvParameters)
             /* Update global data */
             if (xSemaphoreTake(pxSync->xDataMutex, pdMS_TO_TICKS(portMAX_DELAY)) == pdTRUE)
             {
-                if (uxBits & EVT_CAN_FADC1)
-                    pxData->xFADC1 = xLocalData.xFADC1;
-                if (uxBits & EVT_CAN_FADC2)
-                    pxData->xFADC2 = xLocalData.xFADC2;
-                if (uxBits & EVT_CAN_RADC1)
-                    pxData->xRADC1 = xLocalData.xRADC1;
-                if (uxBits & EVT_CAN_RADC2)
-                    pxData->xRADC2 = xLocalData.xRADC2;
+                if (uxBits & EVT_CAN_TPS)
+                    pxData->xTPS = xLocalData.xTPS;
+                if (uxBits & EVT_CAN_FRONT)
+                    pxData->xFront = xLocalData.xFront;
+                if (uxBits & EVT_CAN_CURRENT)
+                    pxData->xCurrent = xLocalData.xCurrent;
+                if (uxBits & EVT_CAN_REAR)
+                    pxData->xRear = xLocalData.xRear;
+                if (uxBits & EVT_CAN_HEARTBEAT)
+                    pxData->xHeartbeat = xLocalData.xHeartbeat;
+                if (uxBits & EVT_CAN_DRV_STATUS1)
+                    pxData->xDrvStatus1 = xLocalData.xDrvStatus1;
+                if (uxBits & EVT_CAN_DRV_STATUS2)
+                    pxData->xDrvStatus2 = xLocalData.xDrvStatus2;
+                if (uxBits & EVT_CAN_MOTOR1)
+                    pxData->xMotor1 = xLocalData.xMotor1;
+                if (uxBits & EVT_CAN_MOTOR2)
+                    pxData->xMotor2 = xLocalData.xMotor2;
                 if (uxBits & EVT_CAN_DRV1)
                     pxData->xDrv1 = xLocalData.xDrv1;
                 if (uxBits & EVT_CAN_DRV2)
@@ -765,6 +890,8 @@ static portTASK_FUNCTION(vDataUpdateTask, pvParameters)
 static portTASK_FUNCTION(vRulesTask, pvParameters)
 {
     AppContext_t *pxCtx = (AppContext_t *)pvParameters;
+    AppRuleBreak_t *pxRuleBreak = &pxCtx->xRuleBreak;
+    AppState_t *pxState = &pxCtx->xState;
     AppSync_t *pxSync = pxCtx->xSync;
     AppData_t *pxData = pxCtx->xData;
     EventBits_t uxBits;
@@ -781,28 +908,82 @@ static portTASK_FUNCTION(vRulesTask, pvParameters)
         /* Wait for new data event */
         uxBits = xEventGroupWaitBits(
             pxSync->xSysEvents,
-            EVT_NEW_DATA,
+            EVT_NEW_DATA | EVT_APPS_RULE_BREAK | EVT_BSE_RULE_BREAK,
             pdTRUE,  // Clear bits after return
             pdFALSE, // Wait for any bit
             portMAX_DELAY);
 
-        /* Local copy of the fields that need rule checking */
-        if (xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
+        /* TODO: Check rule break handling */
+        if ((uxBits & EVT_APPS_RULE_BREAK) != 0U)
         {
-            xLocalData.xAPPS1 = pxData->xFADC1.values.xAPPS1;
-            xLocalData.xAPPS2 = pxData->xFADC1.values.xAPPS2;
-            xLocalData.xFBrake = pxData->xFADC1.values.xFBrake;
-            /* ... */
+            *pxRuleBreak = APP_RB_APPS;
+            *pxState = APP_STATE_HARD_SHUTDOWN;
+        }
+        else if ((uxBits & EVT_BSE_RULE_BREAK) != 0U)
+        {
+            *pxRuleBreak = APP_RB_BSE;
+            *pxState = APP_STATE_HARD_SHUTDOWN;
+        }
+        else if (((uxBits & EVT_NEW_DATA) != 0U) && (*pxState != APP_STATE_HARD_SHUTDOWN))
+        {
+            /* Local copy of the fields that need rule checking */
+            if (xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
+            {
+                xLocalData.xAPPS1 = pxData->xTPS.values.xTPS1;
+                xLocalData.xAPPS2 = pxData->xTPS.values.xTPS2;
+                xLocalData.xFBrake = pxData->xFront.values.xFBrake;
+                /* ... */
 
-            xSemaphoreGive(pxSync->xDataMutex);
+                xSemaphoreGive(pxSync->xDataMutex);
 
-            /////////////////////////////////////////////
-            // TODO: Placeholder for compliance checks //
-            /////////////////////////////////////////////
+                /* Check APPS implausibility */
+                if ((xLocalData.xAPPS1 - xLocalData.xAPPS2) > RB_APPS_THRESHOLD)
+                {
+                    /* Start APPS rule break timer */
+                    xTimerStart(pxSync->xAPPSRuleBreakTimer, portMAX_DELAY);
+                }
+                else
+                {
+                    /* Stop APPS rule break timer */
+                    xTimerStop(pxSync->xAPPSRuleBreakTimer, portMAX_DELAY);
+                }
 
-            xEventGroupSetBits(pxSync->xSysEvents, EVT_DATA_APPROVED);
+                /* TODO: Check BSE implausibility */
+                // if (/* ... */)
+                // {
+                //     /* Start BSE rule break timer */
+                //     xTimerStart(pxSync->xBSERuleBreakTimer, portMAX_DELAY);
+                // }
+                // else
+                // {
+                //     /* Stop BSE rule break timer if running */
+                //     xTimerStop(pxSync->xBSERuleBreakTimer, portMAX_DELAY);
+                // }
 
-            /* TODO: Send rulebreaks via CAN */
+                /* Check BP implausibility */
+                if ((*pxState != APP_STATE_SOFT_SHUTDOWN) &&
+                    (xLocalData.xFBrake > RB_BP_BSE_THRESHOLD) &&
+                    ((xLocalData.xAPPS1 > RB_BP_APPS_HIGH_THRESHOLD) || (xLocalData.xAPPS2 > RB_BP_APPS_HIGH_THRESHOLD)))
+                {
+                    // xEventGroupSetBits(pxSync->xSysEvents, EVT_BP_RULE_BREAK);
+                    *pxRuleBreak = APP_RB_BP;
+                    *pxState = APP_STATE_SOFT_SHUTDOWN;
+                }
+                else if ((*pxState == APP_STATE_SOFT_SHUTDOWN) &&
+                         (xLocalData.xAPPS1 < RB_BP_APPS_LOW_THRESHOLD) && (xLocalData.xAPPS2 < RB_BP_APPS_LOW_THRESHOLD))
+                {
+                    /* Clear rule break and return to running state */
+                    *pxRuleBreak = APP_RB_NONE;
+                    *pxState = APP_STATE_RUNNING;
+                }
+
+                if (*pxRuleBreak == APP_RB_NONE)
+                {
+                    xEventGroupSetBits(pxSync->xSysEvents, EVT_DATA_APPROVED);
+                }
+
+                /* TODO: Send rulebreaks via CAN */
+            }
         }
     }
 
@@ -817,8 +998,10 @@ static portTASK_FUNCTION(vDriversFSMTask, pvParameters)
     EventBits_t uxBits;
     struct
     {
-        uint8_t xSpeedN1;
-        uint8_t xSpeedN2;
+        uint16_t xMotorVelocity1;
+        uint16_t xMotorVelocity2;
+        uint8_t xMotorTemp1;
+        uint8_t xMotorTemp2;
         /* ... */
     } xLocalData;
 
@@ -832,18 +1015,23 @@ static portTASK_FUNCTION(vDriversFSMTask, pvParameters)
             pdFALSE, // Wait for any bit
             portMAX_DELAY);
 
-        /* Local copy of control-related state */
-        if (xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
+        if ((uxBits & EVT_DATA_APPROVED) != 0U)
         {
-            xLocalData.xSpeedN1 = pxData->xDrv1.values.xSpeedN1;
-            xLocalData.xSpeedN2 = pxData->xDrv1.values.xSpeedN2;
-            /* ... */
+            /* Local copy of control-related state */
+            if (xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
+            {
+                xLocalData.xMotorVelocity1 = pxData->xMotor1.values.xMotorVel;
+                xLocalData.xMotorVelocity2 = pxData->xMotor2.values.xMotorVel;
+                xLocalData.xMotorTemp1 = pxData->xDrv1.values.xDrvTemp;
+                xLocalData.xMotorTemp2 = pxData->xDrv2.values.xDrvTemp;
+                /* ... */
 
-            xSemaphoreGive(pxSync->xDataMutex);
+                xSemaphoreGive(pxSync->xDataMutex);
 
-            ////////////////////////////////////////////
-            // TODO: Placeholder for driver FSM logic //
-            ////////////////////////////////////////////
+                ////////////////////////////////////////////
+                // TODO: Placeholder for driver FSM logic //
+                ////////////////////////////////////////////
+            }
         }
     }
 
@@ -1051,8 +1239,14 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
     size_t xTxLen = 0, xRxLen = 0;                                                // Length of data to send/receive
     struct
     {
-        DataFADC1_t xFADC1;
-        DataFADC2_t xFADC2;
+        DataTPS_t xTPS;
+        DataFront_t xFront;
+        DataCurrent_t xCurrent;
+        DataRear_t xRear;
+        DataMotor_t xMotor1;
+        DataMotor_t xMotor2;
+        DataDrv_t xDrv1;
+        DataDrv_t xDrv2;
         /* ... */
     } xLocalData;
     XBeeAPIStatus_t xStatus;
@@ -1076,8 +1270,14 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
                 xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
             {
                 /* Local copy of telemetry data */
-                xLocalData.xFADC1 = pxData->xFADC1;
-                xLocalData.xFADC2 = pxData->xFADC2;
+                xLocalData.xTPS = pxData->xTPS;
+                xLocalData.xFront = pxData->xFront;
+                xLocalData.xCurrent = pxData->xCurrent;
+                xLocalData.xRear = pxData->xRear;
+                xLocalData.xMotor1 = pxData->xMotor1;
+                xLocalData.xMotor2 = pxData->xMotor2;
+                xLocalData.xDrv1 = pxData->xDrv1;
+                xLocalData.xDrv2 = pxData->xDrv2;
                 /* ... */
 
                 xSemaphoreGive(pxSync->xDataMutex);
@@ -1090,12 +1290,12 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
             /* Pack telemetry data into msgpack format */
             // msgpack_pack_bin_with_body(&pk, (const char *)&xLocalData, sizeof(xLocalData));
             msgpack_pack_array(&pk, 7);
-            msgpack_pack_uint16(&pk, xLocalData.xFADC1.values.xAPPS1);
-            msgpack_pack_uint16(&pk, xLocalData.xFADC1.values.xAPPS2);
-            msgpack_pack_uint16(&pk, xLocalData.xFADC1.values.xFBrake);
-            msgpack_pack_uint16(&pk, xLocalData.xFADC2.values.xFWheel1);
-            msgpack_pack_uint16(&pk, xLocalData.xFADC2.values.xFWheel2);
-            msgpack_pack_uint16(&pk, xLocalData.xFADC2.values.xSteering);
+            msgpack_pack_uint16(&pk, xLocalData.xTPS.values.xTPS1);
+            msgpack_pack_uint16(&pk, xLocalData.xTPS.values.xTPS2);
+            msgpack_pack_uint16(&pk, xLocalData.xFront.values.xFLSpeed);
+            msgpack_pack_uint16(&pk, xLocalData.xFront.values.xFRSpeed);
+            msgpack_pack_uint16(&pk, xLocalData.xFront.values.xDirAngle);
+            msgpack_pack_uint16(&pk, xLocalData.xFront.values.xFBrake);
             /* ... */
 
             result = cobs_encode(xTxBuff, sizeof(xTxBuff), sbuf.data, sbuf.size);
@@ -1164,6 +1364,20 @@ static void vTxTimeoutCallback(TimerHandle_t xTimer)
     configASSERT(xTimer != NULL);
 
     xEventGroupSetBits(xAppContext.xSync->xSysEvents, EVT_TELEMETRY_NACK);
+}
+
+static void vAPPSRuleBreakTimerCallback(TimerHandle_t xTimer)
+{
+    configASSERT(xTimer != NULL);
+
+    xEventGroupSetBits(xAppContext.xSync->xSysEvents, EVT_APPS_RULE_BREAK);
+}
+
+static void vBSERuleBreakTimerCallback(TimerHandle_t xTimer)
+{
+    configASSERT(xTimer != NULL);
+
+    xEventGroupSetBits(xAppContext.xSync->xSysEvents, EVT_BSE_RULE_BREAK);
 }
 
 #ifdef ENABLE_APP_TEST
