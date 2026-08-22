@@ -72,8 +72,12 @@
 
 
 /* External Functions */
+#ifdef __TI_COMPILER_VERSION__
 /*SAFETYMCUSW 218 S MR:20.2 <APPROVED> "Functions from library" */
 extern void __TI_auto_init(void);
+#else
+extern void __libc_init_array(void);
+#endif
 /*SAFETYMCUSW 354 S MR:NA <APPROVED> " Startup code(main should be declared by the user)" */
 extern int main(void);
 /*SAFETYMCUSW 122 S MR:20.11 <APPROVED> "Startup code(exit and abort need to be present)" */
@@ -90,10 +94,13 @@ void _c_int00(void);
 /* USER CODE BEGIN (4) */
 /* USER CODE END */
 
+#ifdef __TI_COMPILER_VERSION__
 #pragma CODE_STATE(_c_int00, 32)
 #pragma INTERRUPT(_c_int00, RESET)
 #pragma WEAK(_c_int00)
-
+#else
+__attribute__((weak))
+#endif
 /* SourceId : STARTUP_SourceId_001 */
 /* DesignId : STARTUP_DesignId_001 */
 /* Requirements : HL_SR508 */
@@ -659,8 +666,26 @@ void _c_int00(void)
     /* Configure system response to error conditions signaled to the ESM group1 */
     /* This function can be configured from the ESM tab of HALCoGen */
     esmInit();
-    /* initialize copy table */
+    /* initialize copy table / C++ constructors */
+#ifdef __TI_COMPILER_VERSION__
     __TI_auto_init();
+#else
+    {
+        /* Copy .data from flash LMA to RAM VMA */
+        extern unsigned int _sidata, _sdata, _edata;
+        unsigned int *src = &_sidata, *dst;
+        for (dst = &_sdata; dst < &_edata; ) { *dst++ = *src++; }
+        /* Zero-fill .bss */
+        extern unsigned int _sbss, _ebss;
+        for (dst = &_sbss; dst < &_ebss; ) { *dst++ = 0U; }
+        /* Zero-fill the kernel BSS/heap. These are separate NOLOAD sections in
+           sys_link.ld, so they are not covered by the _sbss.._ebss range. */
+        extern unsigned int _skernelbss, _ekernelbss, _skernelheap, _ekernelheap;
+        for (dst = &_skernelbss; dst < &_ekernelbss; ) { *dst++ = 0U; }
+        for (dst = &_skernelheap; dst < &_ekernelheap; ) { *dst++ = 0U; }
+    }
+    __libc_init_array();
+#endif
 /* USER CODE BEGIN (75) */
 /* USER CODE END */
     

@@ -278,9 +278,5 @@ uint8_t Fapi_calculateEcc(uint32_t u32Address, uint64_t u64Data)
     return 0U;
 }
 
-/* ---- User-defined --------------------------------------------------------- */
-
-Fapi_StatusType Fapi_serviceWatchdogTimer(void)
-{
-    return Fapi_Status_Success;
-}
+/* Fapi_serviceWatchdogTimer() is deliberately not stubbed here - the
+ * canonical definition lives in ti_fee/Fapi_UserDefinedFunctions.c. */

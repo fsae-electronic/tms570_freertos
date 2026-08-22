@@ -27,11 +27,11 @@ endif
 CC      = $(_T)gcc
 CXX     = $(_T)g++
 AS      = $(_T)gcc
-LD      = $(_T)g++
+LD      = $(_T)gcc
 OBJCOPY = $(_T)objcopy
 SIZE    = $(_T)size
 
-CPU_FLAGS = -mcpu=cortex-r4 -mfpu=vfpv3-d16 -mfloat-abi=hard -mbig-endian -marm
+CPU_FLAGS = -mcpu=cortex-r4 -mfpu=vfpv3-d16 -mfloat-abi=hard -mbig-endian -mbe32 -marm
 
 CFLAGS   = $(CPU_FLAGS) -Os -Wall -Wextra -ffunction-sections -fdata-sections -g3
 CXXFLAGS = $(CPU_FLAGS) -Os -Wall -Wextra -ffunction-sections -fdata-sections -g3 \
@@ -58,13 +58,14 @@ SRCS_C += $(wildcard rtos/*.c)
 SRCS_C += $(wildcard ti_fee/*.c)
 SRCS_C += $(wildcard ft81x_driver/*.c)
 SRCS_C += $(wildcard cobs/*.c)
+SRCS_C += $(wildcard port/*.c)
 # msgpack/src excluded: sysdep.h is missing (needs `git submodule update --init`
 # and a platform sysdep.h before the msgpack-c library can be compiled).
 # Re-enable once msgpack integration is implemented.
 
-# C++ sources — exclude simulation/bench-test entry point by default
-SRCS_CXX := $(wildcard app/*.cpp)
-SRCS_CXX := $(filter-out app/test_main_ecu.cpp, $(SRCS_CXX))
+# C++ sources. test_main_ecu.cpp is included: it defines no main(), and
+# vAppInit() in App.cpp calls test_main_ecu_init() unconditionally.
+SRCS_CXX := $(wildcard app/*.cpp) $(wildcard ft81x_driver/*.cpp)
 
 # Assembly sources (GNU as syntax .s files only)
 SRCS_S :=
@@ -84,7 +85,7 @@ OBJS  += $(patsubst %.s,   build/%.o, $(SRCS_S))
 all: $(TARGET).elf
 
 $(TARGET).elf: $(OBJS)
-	$(LD) $(LDFLAGS) -o $@ $^ -lgcc -lc -lnosys
+	$(LD) $(LDFLAGS) -o $@ $^ -lgcc -lc -lm -lnosys
 	$(OBJCOPY) -O binary $(TARGET).elf $(TARGET).bin
 
 # C compilation

@@ -58,6 +58,24 @@
 
 /* USER CODE BEGIN (0) */
 /* USER CODE END */
+
+/* TI's '#pragma WEAK(f)' below is a TI-CGT extension that GCC silently
+ * ignores, which turns these default handlers into strong definitions and
+ * makes them collide with the real ones in app/. GCC spells it differently. */
+#if defined(__GNUC__) && !defined(__TI_COMPILER_VERSION__)
+#pragma weak esmGroup1Notification
+#pragma weak esmGroup2Notification
+#pragma weak memoryPort0TestFailNotification
+#pragma weak memoryPort1TestFailNotification
+#pragma weak canErrorNotification
+#pragma weak canStatusChangeNotification
+#pragma weak canMessageNotification
+#pragma weak gioNotification
+#pragma weak sciNotification
+#pragma weak spiNotification
+#pragma weak spiEndNotification
+#pragma weak dmaGroupANotification
+#endif
 #pragma WEAK(esmGroup1Notification)
 void esmGroup1Notification(uint32 channel)
 {

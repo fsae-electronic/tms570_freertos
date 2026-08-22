@@ -326,7 +326,8 @@ Bridgetek_EVE2 display_data;
  * @brief Initialize the application
  * @note This function is called once at the beginning of the main program
  */
-void vAppInit(void)
+/* Called from halcogen/sys_main.c, which is C - needs unmangled linkage. */
+extern "C" void vAppInit(void)
 {
     /* Initialize modules */
     vModulesInit();
@@ -357,7 +358,8 @@ void vAppInit(void)
  * @brief Run the application
  * @note This function is called constantly in an infinite loop
  */
-void vAppRun(void)
+/* Called from halcogen/sys_main.c, which is C - needs unmangled linkage. */
+extern "C" void vAppRun(void)
 {
     /* All work done in tasks */
 }

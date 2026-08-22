@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "ui_touch.hpp"
 #include "pages.hpp"
 extern "C" {

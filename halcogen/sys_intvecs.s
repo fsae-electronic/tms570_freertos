@@ -48,6 +48,7 @@
     .extern _c_int00
     .extern _dabort
     .extern phantomInterrupt
+    .extern vPortSWI
     .weak resetEntry
 
 /*-------------------------------------------------------------------------------*/
@@ -57,8 +58,11 @@ resetEntry:
         b   _c_int00
 undefEntry:
         b   undefEntry
+@ FreeRTOS reaches its protected-mode entry points through the SVC
+@ handler, so this vector must jump to the port's dispatcher. HALCoGen
+@ generates a self-branch here, which hangs on the first critical section.
 svcEntry:
-        b   svcEntry
+        b   vPortSWI
 prefetchEntry:
         b   prefetchEntry
         b   _dabort

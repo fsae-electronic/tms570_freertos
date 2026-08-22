@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "dashboard.hpp"
 #include "ui_rpm_bar.hpp"
 #include "ui_buttons.hpp"

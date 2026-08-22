@@ -128,20 +128,28 @@ SECTIONS
     PROVIDE (end  = _ebss);
     PROVIDE (_end = _ebss);
 
-    /* FreeRTOS kernel BSS in MPU-protected KRAM */
-    .kernelBSS :
+    /* FreeRTOS kernel BSS in MPU-protected KRAM.
+     * NOLOAD matters: PRIVILEGED_DATA uses __attribute__((section(".kernelBSS"))),
+     * and GCC emits explicitly-sectioned uninitialised data as PROGBITS. Left
+     * loadable, these land at 0x08000800 and 'objcopy -O binary' pads the whole
+     * gap from flash, producing a ~129 MB image. They are zeroed by sys_startup.c. */
+    .kernelBSS (NOLOAD) :
     {
         . = ALIGN(4);
+        _skernelbss = .;
         *(.kernelBSS)
         . = ALIGN(4);
+        _ekernelbss = .;
     } >KRAM
 
     /* FreeRTOS kernel heap in MPU-protected KRAM */
-    .kernelHEAP :
+    .kernelHEAP (NOLOAD) :
     {
         . = ALIGN(4);
+        _skernelheap = .;
         *(.kernelHEAP)
         . = ALIGN(4);
+        _ekernelheap = .;
     } >KRAM
 
     .ARM.attributes 0 : { *(.ARM.attributes) }
