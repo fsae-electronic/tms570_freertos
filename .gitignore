@@ -10,3 +10,9 @@ Debug/
 .clangd
 .cproject
 .project
+
+# GCC build outputs
+build/
+*.elf
+*.bin
+*.map
