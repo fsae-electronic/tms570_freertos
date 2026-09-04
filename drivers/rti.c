@@ -152,6 +152,38 @@ void rtiInit(void)
 /* USER CODE END */
 }
 
+/** @fn void rtiInitPeriodicCompares(void)
+*   @brief Programs the reload period of RTI compares 1-3 (the app's periodic
+*          display/data/telemetry ticks) for 30/60/50 Hz on the 40 MHz FRC0
+*          clock (80 MHz CPU / 2, per the FreeRTOS port's CPUC0 prescaler).
+*
+*   Deliberately does NOT call the full rtiInit(): that function also resets
+*   GCTRL, TBCTRL, CAPCTRL, CNT[0], and COMPCTRL, all of which the FreeRTOS
+*   port's prvSetupTimerInterrupt() (rtos/os_port.c) configures for the OS
+*   tick during vTaskStartScheduler(). This function only ever touches
+*   CMP[1..3], which the port never writes, so it is safe to call from
+*   vModulesInit() before the scheduler starts.
+*
+*   @note The corresponding interrupt-enable bits must still be set with
+*   rtiEnableNotification() AFTER vTaskStartScheduler() has run (e.g. from
+*   vInitTask), since prvSetupTimerInterrupt() clears all RTI interrupt
+*   enables and re-enables only compare 0.
+*/
+void rtiInitPeriodicCompares(void)
+{
+    /* Compare 1 -- display update, ~30 Hz: 40,000,000 / 30 = 1,333,333 */
+    rtiREG1->CMP[1U].COMPx = 1333333U;
+    rtiREG1->CMP[1U].UDCPx = 1333333U;
+
+    /* Compare 2 -- data update, ~60 Hz: 40,000,000 / 60 = 666,667 */
+    rtiREG1->CMP[2U].COMPx = 666667U;
+    rtiREG1->CMP[2U].UDCPx = 666667U;
+
+    /* Compare 3 -- telemetry update, 50 Hz: 40,000,000 / 50 = 800,000 */
+    rtiREG1->CMP[3U].COMPx = 800000U;
+    rtiREG1->CMP[3U].UDCPx = 800000U;
+}
+
 /* USER CODE BEGIN (5) */
 /* USER CODE END */
 

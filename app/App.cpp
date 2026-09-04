@@ -32,6 +32,7 @@ extern "C"
 #include "sci.h"
 #include "spi.h"
 #include "ti_fee.h"
+#include <string.h>
 
 #ifdef __cplusplus
 }
@@ -558,7 +559,9 @@ static void vModulesInit(void)
     /* Initialize peripherals */
     canInit();
     gioInit();
-    // rtiInit(); // RTI will be started after scheduler starts
+    rtiInitPeriodicCompares(); // Program compares 1-3 reload values (30/60/50Hz).
+                               // Does not touch compare 0 or any register the
+                               // FreeRTOS port's timer setup owns -- safe pre-scheduler.
     sciInit();
     spiInit();
 
@@ -587,9 +590,12 @@ static void vModulesInit(void)
     /* Enable peripheral callbacks */
     canEnableErrorNotification(CAN_REG);
     canEnableStatusChangeNotification(CAN_REG);
-    rtiEnableNotification(RTI_SCREEN_UPDATE);
-    rtiEnableNotification(RTI_DATA_UPDATE);
-    rtiEnableNotification(RTI_TELEMETRY_UPDATE);
+    // NOTE: RTI compare 1-3 notifications are NOT enabled here. FreeRTOS's
+    // prvSetupTimerInterrupt() (called from vTaskStartScheduler(), which runs
+    // after this function) clears ALL RTI interrupt-enable bits and
+    // re-enables only compare 0 -- enabling these here would get silently
+    // wiped. They are enabled instead from vInitModulesWithInterrupts(),
+    // which runs post-scheduler-start from vInitTask.
     // sciEnableNotification(SCI_REG, SCI_TX_INT | SCI_RX_INT);
     sciEnableNotification(SCI_REG, 0); // Enabled in HALCoGen
     // spiEnableNotification(SPI_REG, 0);
@@ -603,6 +609,13 @@ static void vInitModulesWithInterrupts(void)
 {
     /* Start RTI counter for periodic interrupts */
     rtiStartCounter(rtiCOUNTER_BLOCK0);
+
+    /* Enable compare 1-3 interrupts here (after the scheduler's own timer
+     * setup has already run and cleared/re-set the RTI interrupt-enable
+     * bits) so display/data-update/telemetry ticks actually reach the app. */
+    rtiEnableNotification(RTI_SCREEN_UPDATE);
+    rtiEnableNotification(RTI_DATA_UPDATE);
+    rtiEnableNotification(RTI_TELEMETRY_UPDATE);
 }
 
 /**
@@ -663,6 +676,7 @@ static void vCreateTasks(AppContext_t *pxCtx)
         PRIO_RF_DATA_RX,
         pxRes->xRFDataRxStack,
         &pxRes->xRFDataRxTaskBuffer);
+    configASSERT(pxTasks->xRFDataRxTask != NULL);
 
     pxTasks->xCmdTask = xTaskCreateStatic(
         vCmdTask,
@@ -810,7 +824,7 @@ static portTASK_FUNCTION(vRulesTask, pvParameters)
     {
         uint16_t tps;
         uint16_t brake_front;
-        uint16_t brake_rear;
+        /* brake_rear: no rear sensor board on the bus yet */
         /* ... */
     } xLocalData;
 
@@ -827,9 +841,8 @@ static portTASK_FUNCTION(vRulesTask, pvParameters)
         /* Local copy of the fields that need rule checking */
         if (xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
         {
-            xLocalData.tps = pxData->sensors_data.values.tps;
-            xLocalData.brake_front = pxData->sensors_data.values.brake_front;
-            xLocalData.brake_rear = pxData->sensors_data.values.brake_rear;
+            xLocalData.tps = pxData->sensors_data.values.tps1;
+            xLocalData.brake_front = pxData->speed_data.values.front_brake;
             /* ... */
 
             xSemaphoreGive(pxSync->xDataMutex);
@@ -925,24 +938,31 @@ static portTASK_FUNCTION(vRFDataRxTask, pvParameters)
 
         if ((uxBits & EVT_SCI_RX_READY) != 0U)
         {
+            /* Read the ID byte that was just received into xRxBuff[0] */
+            xId = xRxBuff[0];
+
             //////////////////////////////////////////////
             // TODO: Placeholder for RF data processing //
             //////////////////////////////////////////////
 
             /* Set data ready flag for the relevant task */
+            EventBits_t uxSetBits = 0U;
             switch (xId)
             {
-            case CMD_ID:              // Command identifier
-                uxBits = EVT_SCI_CMD; // | TELEMETRY_READY;
+            case CMD_ID:                 // Command identifier
+                uxSetBits = EVT_SCI_CMD; // | TELEMETRY_READY;
                 break;
-            case TELEMETRY_ACK_ID:              // Telemetry ack identifier
-                uxBits = EVT_SCI_TELEMETRY_ACK; // | CMD_READY;
+            case TELEMETRY_ACK_ID:                 // Telemetry ack identifier
+                uxSetBits = EVT_SCI_TELEMETRY_ACK; // | CMD_READY;
                 break;
             default:
                 break;
             }
 
-            xEventGroupSetBits(pxSync->xSysEvents, uxBits);
+            if (uxSetBits != 0U)
+            {
+                xEventGroupSetBits(pxSync->xSysEvents, uxSetBits);
+            }
         }
     }
 
@@ -1017,7 +1037,8 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
         uxBits = xEventGroupWaitBits(
             pxSync->xSysEvents,
             EVT_PERIODIC_TELEMETRY | EVT_SCI_TELEMETRY_ACK | EVT_TELEMETRY_NACK,
-            pdFALSE, // Clear bits after return
+            pdTRUE,  // Clear bits after return -- must clear, or a non-clearing
+                     // wait returns immediately forever once any bit is set once
             pdFALSE, // Wait for any bit
             portMAX_DELAY);
 
@@ -1037,11 +1058,28 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
                 /* ... */
 
                 xSemaphoreGive(pxSync->xDataMutex);
-            }
 
-            ///////////////////////////////////////////
-            // TODO: Placeholder for data formatting //
-            ///////////////////////////////////////////
+                /* Raw fixed-layout pack (no COBS/MessagePack framing yet --
+                 * both are vendored but unwired; this is a stopgap so real
+                 * data goes out now). Layout, all little-endian:
+                 *   [0..3]   float  rpm
+                 *   [4..7]   float  battery_voltage
+                 *   [8..11]  float  battery_current
+                 *   [12..15] float  wheel_speed_fl
+                 *   [16..19] float  wheel_speed_fr
+                 *   [20]     uint8  motor1_fault
+                 *   [21]     uint8  motor2_fault
+                 *   [22..63] zero padding
+                 * A ground-station script must parse this exact layout. */
+                memset(xTxBuff, 0, sizeof(xTxBuff));
+                memcpy(&xTxBuff[0],  &xLocalData.rpm,             sizeof(xLocalData.rpm));
+                memcpy(&xTxBuff[4],  &xLocalData.battery_voltage, sizeof(xLocalData.battery_voltage));
+                memcpy(&xTxBuff[8],  &xLocalData.battery_current, sizeof(xLocalData.battery_current));
+                memcpy(&xTxBuff[12], &xLocalData.wheel_speed_fl,  sizeof(xLocalData.wheel_speed_fl));
+                memcpy(&xTxBuff[16], &xLocalData.wheel_speed_fr,  sizeof(xLocalData.wheel_speed_fr));
+                xTxBuff[20] = xLocalData.motor1_fault;
+                xTxBuff[21] = xLocalData.motor2_fault;
+            }
 
             /* Send telemetry data to XBee via UART */
             // sciSend(SCI_REG, len, buffer); // For variable length messages

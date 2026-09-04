@@ -280,6 +280,7 @@ typedef struct rti_config_reg
 /* RTI Interface Functions */
 
 void rtiInit(void);
+void rtiInitPeriodicCompares(void);
 void rtiStartCounter(uint32 counter);
 void rtiStopCounter(uint32 counter);
 uint32 rtiResetCounter(uint32 counter);

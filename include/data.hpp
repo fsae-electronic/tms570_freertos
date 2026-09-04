@@ -12,15 +12,17 @@
 #include <stdbool.h>
 /* Sensors and actuators IDs
 
-Pedals: 0x120 b0-1: TPS1 ; b2-3: TPS2 ; b4-5: Front brake ; b6-7: Rear brake
-Steering wheel: 0x121 b0-1: Steering angle
-Speed: 0x122 b0-1: FR ; b2-3: FL ; b4-5: RR ; b6-7: RL
-Current: 0x123 b0-1: AC_D1 ; b2-3: AC_D2 ; DC_D1 ; b4-5: DC_D2 ; b6-7: DC_D3
+Mailbox 1 / 0x501 (from adc2can_front, its mailbox 2): TPS data
+  b0-1: tps1 ; b2-3: tps2 ; b4-5: tps1_raw (unused here) ; b6-7: tps2_raw (unused here)
+Mailbox 2 / 0x502 (from adc2can_front, its mailbox 3): front axle data
+  b0-1: front-left wheel RPM ; b2-3: front-right wheel RPM ; b4-5: steering/direction value ; b6-7: front brake pressure
+  (front sensor board only -- no rear-axle data)
 
+Mailboxes 3-6 (motor1/motor2/drivers_status/dynamic) are not yet fed by any known board.
 */
 
-#define SENSORS_ID 0x120
-#define WHEEL_SPEED_ID 0x121
+#define SENSORS_ID 0x501
+#define WHEEL_SPEED_ID 0x502
 #define MOTOR1_ID 0x122
 #define MOTOR2_ID 0x123
 #define STATUS_DRIVERS_ID 0x124
@@ -38,10 +40,10 @@ typedef struct
 
         struct
         {
-            uint16_t tps;
-            uint16_t brake_front;
-            uint16_t brake_rear;
-            uint16_t steering_angle;
+            uint16_t tps1;
+            uint16_t tps2;
+            uint16_t tps1_raw; // raw ADC value from adc2can_front, not used here
+            uint16_t tps2_raw; // raw ADC value from adc2can_front, not used here
         } values;
     };
     volatile bool new_data;
@@ -56,10 +58,10 @@ typedef struct
 
         struct
         {
-            uint16_t wheel_speed_fl; // Front right wheel speed
-            uint16_t wheel_speed_fr; // Front left wheel speed
-            uint16_t wheel_speed_rl; // Rear left wheel speed
-            uint16_t wheel_speed_rr; // Rear right wheel speed
+            uint16_t wheel_speed_fl; // Front left wheel speed (RPM)
+            uint16_t wheel_speed_fr; // Front right wheel speed (RPM)
+            uint16_t steering_angle; // Steering/direction value
+            uint16_t front_brake;    // Front brake pressure
         } values;
     };
     volatile bool new_data;
