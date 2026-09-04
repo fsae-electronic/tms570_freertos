@@ -19,14 +19,13 @@ on_board_status_data_t on_board_status_data;
 void init_data(void)
 {
     canInit();
-    canEnableloopback(canREG1, Internal_Lbk); // Enable loopback mode for testing without actual CAN hardware
-
-
+    // NOTE: internal loopback removed -- CAN1 now listens on the real bus
+    // (needed to receive frames from the adc2can_front sensor board).
 
     sciInit();
     sciSetBaudrate(sciREG, 115200U);
 
-    const char *msg = "TMS570 ON-BOARD ECU INITIALIZED\n";
+    const char *msg = "TMS570 MAIN ECU INITIALIZED\n";
     sciSend(sciREG, strlen(msg), (uint8*)msg);
 }
 
@@ -37,20 +36,22 @@ void update_data(void)
     // Send data of buttons status to dashboard
     if(sensors_data.new_data)
     {
+        // CAN ID 0x501 (adc2can_front): TPS1/TPS2. Using tps1 as the primary
+        // reading; tps2 is available on sensors_data.values.tps2 for future
+        // plausibility checking (dual-TPS comparison) but not used yet.
         canGetData(canREG1, canMESSAGE_BOX1, sensors_data.raw);
-        dashboard_data.tps = (float)sensors_data.values.tps;
-        dashboard_data.brake_front = (float)sensors_data.values.brake_front;
-        dashboard_data.brake_rear = (float)sensors_data.values.brake_rear;
-        dashboard_data.steering_angle = (float)sensors_data.values.steering_angle;
+        dashboard_data.tps = (float)sensors_data.values.tps1;
         sensors_data.new_data = false;
     }
     if(speed_data.new_data)
     {
+        // CAN ID 0x502 (adc2can_front): front axle only -- no rear wheel
+        // speed/brake data exists yet (no rear sensor board on the bus).
         canGetData(canREG1, canMESSAGE_BOX2, speed_data.raw);
         dashboard_data.wheel_speed_fl = (float)speed_data.values.wheel_speed_fl;
         dashboard_data.wheel_speed_fr = (float)speed_data.values.wheel_speed_fr;
-        dashboard_data.wheel_speed_rl = (float)speed_data.values.wheel_speed_rl;
-        dashboard_data.wheel_speed_rr = (float)speed_data.values.wheel_speed_rr;
+        dashboard_data.steering_angle = (float)speed_data.values.steering_angle;
+        dashboard_data.brake_front = (float)speed_data.values.front_brake;
         speed_data.new_data = false;
     }
     if(motor1_data.new_data)
