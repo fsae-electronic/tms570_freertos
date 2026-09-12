@@ -82,31 +82,17 @@
 @
 .macro portRESTORE_CONTEXT
 
+        @ Per-task MPU region reprogramming deliberately removed: this
+        @ project creates all tasks via plain xTaskCreateStatic(), not
+        @ the MPU-aware xTaskCreateRestricted(), so nothing ever
+        @ populates the region-descriptor words this code used to read
+        @ from TCB+4 -- every context switch was reprogramming the
+        @ hardware MPU from uninitialized memory, which could revoke
+        @ access to the very code/stack/TCB memory being executed,
+        @ causing an unpredictable data/prefetch abort on switch-in.
+
         LDR     R0, pxCurrentTCBConst
         LDR     R0, [R0]
-
-        @ Configure task stack MPU region (region 5)
-        mov     r4,  #5
-        add     r12, r0, #4
-        ldmia   r12!, {r1-r3}
-        mcr     p15, #0, r4, c6, c2, #0     @ Select region
-        mcr     p15, #0, r1, c6, c1, #0     @ Base Address
-        mcr     p15, #0, r3, c6, c1, #4     @ Access Attributes
-        mcr     p15, #0, r2, c6, c1, #2     @ Size and Enable
-
-        ldr     r5, portMax_MPU_Region
-        mov     r4,  #6
-        @ Load dynamic per-task MPU regions (6..portMax_MPU_Region)
-.Lmpu_loop_\@:
-        ldmia   r12!, {r1-r3}
-        mcr     p15, #0, r4, c6, c2, #0     @ Select region
-        mcr     p15, #0, r1, c6, c1, #0     @ Base Address
-        mcr     p15, #0, r3, c6, c1, #4     @ Access Attributes
-        mcr     p15, #0, r2, c6, c1, #2     @ Size and Enable
-        add     r4, r4, #1
-        cmp     r4, r5
-        bne     .Lmpu_loop_\@
-
         LDR     LR, [R0]
 
         @ The FPU context flag is the first thing on the stack.

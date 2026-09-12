@@ -44,7 +44,6 @@ LDFLAGS  = $(CPU_FLAGS) -nostartfiles -Wl,--gc-sections \
 
 INCLUDES = \
     -Iinclude \
-    -Ift81x_driver \
     -Imsgpack/include \
     -Icobs
 
@@ -56,16 +55,15 @@ SRCS_C += $(wildcard drivers/*.c)
 SRCS_C += $(wildcard halcogen/*.c)
 SRCS_C += $(wildcard rtos/*.c)
 SRCS_C += $(wildcard ti_fee/*.c)
-SRCS_C += $(wildcard ft81x_driver/*.c)
 SRCS_C += $(wildcard cobs/*.c)
 SRCS_C += $(wildcard port/*.c)
 # msgpack/src excluded: sysdep.h is missing (needs `git submodule update --init`
 # and a platform sysdep.h before the msgpack-c library can be compiled).
 # Re-enable once msgpack integration is implemented.
 
-# C++ sources. test_main_ecu.cpp is included: it defines no main(), and
-# vAppInit() in App.cpp calls test_main_ecu_init() unconditionally.
-SRCS_CXX := $(wildcard app/*.cpp) $(wildcard ft81x_driver/*.cpp)
+# C++ sources. test_main_ecu.cpp is included but currently unused (no
+# display/UI code calls into it); harmless to leave compiled in.
+SRCS_CXX := $(wildcard app/*.cpp)
 
 # Assembly sources (GNU as syntax .s files only)
 SRCS_S :=
