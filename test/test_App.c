@@ -1,41 +1,46 @@
+#include <string.h>
+
 #include "can.h"
 #include "sci.h"
 
+#include "data.h"
 #include "test_App.h"
 
+#include "msgpack/msgpack.h"
+
 // Simulated values
-static float rpm = 0;
+static float tps_1 = 0;
+static float tps_2 = 0;
 
-static float battery_voltage = 400;
-static float battery_current = 20;
+static float fl_speed = 0;
+static float fr_speed = 0;
+static float dir_angle = 0;
+static float f_brake = 0;
 
-static float tps = 0;
-static float brake_front = 0;
-static float brake_rear = 0;
-static float steering_angle = 0;
+static float ac_1 = 0;
+static float ac_2 = 0;
+static float dc_1 = 0;
+static float dc_2 = 0;
 
-static float wheel_speed_fl = 0;
-static float wheel_speed_fr = 0;
-static float wheel_speed_rl = 0;
-static float wheel_speed_rr = 0;
+static float r_brake = 0;
 
-static float motor_voltage = 400;
-static float motor_current = 20;
-static float motor_temp = 40;
+static float tps_main = 0;
+static float mode_main = 0;
+static float error_main = 0;
 
-static uint8_t motor1_fault = 0;
-static uint8_t motor2_fault = 0;
-static uint8_t drive_state = 0;
+static float motor_vel_1 = 0;
+static float motor_vel_2 = 0;
+static float motor_current_1 = 20;
+static float motor_current_2 = 20;
+static float motor_temp_1 = 40;
+static float motor_temp_2 = 40;
+
+static float drv_temp_1 = 40;
+static float drv_temp_2 = 40;
+static float battery_voltage_1 = 400;
+static float battery_voltage_2 = 400;
 
 static uint32_t sim_counter = 0;
-
-// Buffers
-static uint8_t sensors_msg[8];
-static uint8_t wheel_speed_msg[8];
-static uint8_t dynamic_msg[8];
-static uint8_t motor1_msg[8];
-static uint8_t motor2_msg[8];
-static uint8_t status_msg[8];
 
 // static uint8_t sci_tx_status_frame[] = {
 //     0x7EU, 0x00U, 0x0FU,
@@ -46,70 +51,162 @@ static uint8_t status_msg[8];
 //     0x48U
 // };
 
+void pack_example()
+{
+    /* Initialize a simple buffer to hold the serialized data */
+    msgpack_sbuffer sbuf;
+    msgpack_sbuffer_init(&sbuf);
+
+    /* Initialize the packer with the buffer write callback */
+    msgpack_packer pk;
+    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+
+    /* Serialize a structured payload (array containing [42, true, "Hello"]) */
+    int retval = msgpack_pack_array(&pk, 3); // Tell the packer an array of 3 elements follows
+
+    retval = msgpack_pack_int(&pk, 42); // Pack first element
+    retval = msgpack_pack_true(&pk);    // Pack second element
+
+    // For strings, pack the header size first, then the actual payload body
+    const char *str = "Hello";
+    size_t str_len = strlen(str);
+    retval = msgpack_pack_str(&pk, str_len);
+    retval = msgpack_pack_str_body(&pk, str, str_len);
+
+    /* At this stage, sbuf.data contains the binary MessagePack payload */
+
+    /* Clean up buffer allocations when done */
+    msgpack_sbuffer_destroy(&sbuf);
+}
+
+static void vMsgPackTest(void)
+{
+    msgpack_sbuffer sbuf;
+    msgpack_packer pk;
+    msgpack_unpacked result;
+    size_t offset = 0U;
+    int retval = 0;
+    const char sample_text[] = "ok";
+    const size_t sample_text_len = sizeof(sample_text) - 1U;
+
+    msgpack_sbuffer_init(&sbuf);
+    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+    msgpack_unpacked_init(&result);
+
+    retval = msgpack_pack_array(&pk, 3U);
+    retval = msgpack_pack_uint32(&pk, 42U);
+    retval = msgpack_pack_true(&pk);
+    retval = msgpack_pack_str(&pk, sample_text_len);
+    retval = msgpack_pack_str_body(&pk, sample_text, sample_text_len);
+    retval = msgpack_unpack_next(&result, sbuf.data, sbuf.size, &offset) == MSGPACK_UNPACK_SUCCESS;
+    retval = offset == sbuf.size;
+    retval = result.data.type == MSGPACK_OBJECT_ARRAY;
+    retval = result.data.via.array.size == 3U;
+    retval = result.data.via.array.ptr[0].type == MSGPACK_OBJECT_POSITIVE_INTEGER;
+    retval = result.data.via.array.ptr[0].via.u64 == 42U;
+    retval = result.data.via.array.ptr[1].type == MSGPACK_OBJECT_BOOLEAN;
+    retval = result.data.via.array.ptr[1].via.boolean == true;
+    retval = result.data.via.array.ptr[2].type == MSGPACK_OBJECT_STR;
+    retval = result.data.via.array.ptr[2].via.str.size == sample_text_len;
+    retval = memcmp(result.data.via.array.ptr[2].via.str.ptr, sample_text, sample_text_len) == 0;
+
+    msgpack_unpacked_destroy(&result);
+    msgpack_sbuffer_destroy(&sbuf);
+}
+
 void vTestAppInit(void)
 {
     /* Enable loopback mode for testing without actual hardware */
     canEnableloopback(canREG1, Internal_Lbk);
     // sciEnableLoopback(sciREG, Digital_Lbk);
+
+    /* Small msgpack test for the official library */
+    // pack_example();
+    // vMsgPackTest();
 }
 
 void vTestAppPeriodic(void)
 {
+    /* Buffers */
+    DataTPS_t tps_msg;
+    DataFront_t front_msg;
+    DataCurrent_t current_msg;
+    DataRear_t rear_msg;
+    DataMainECU_t main_ecu_msg;
+    DataMotor_t motor_msg_1, motor_msg_2;
+    DataDrv_t drv_msg_1, drv_msg_2;
+    uint8_t raw[8];
+
     /* Simulate sensor data changes */
 
-    rpm += 10;
-    if (rpm > 5000)
-        rpm = 0;
+    tps_1 += 1;
+    if (tps_1 > 100)
+        tps_1 = 0;
+    tps_2 += 1;
+    if (tps_2 > 100)
+        tps_2 = 0;
 
-    battery_voltage += 0.5;
-    if (battery_voltage > 400)
-        battery_voltage = 350;
+    fl_speed += 1;
+    if (fl_speed > 250)
+        fl_speed = 0;
+    fr_speed += 1.2;
+    if (fr_speed > 250)
+        fr_speed = 0;
+    dir_angle += 1;
+    if (dir_angle > 90)
+        dir_angle = -90;
+    f_brake += 0.5;
+    if (f_brake > 100)
+        f_brake = 0;
 
-    battery_current += 1;
-    if (battery_current > 200)
-        battery_current = 0;
+    ac_1 += 0.2;
+    if (ac_1 > 100)
+        ac_1 = 0;
+    ac_2 += 0.3;
+    if (ac_2 > 100)
+        ac_2 = 0;
+    dc_1 += 0.4;
+    if (dc_1 > 100)
+        dc_1 = 0;
+    dc_2 += 0.5;
+    if (dc_2 > 100)
+        dc_2 = 0;
 
-    steering_angle += 1;
-    if (steering_angle > 90)
-        steering_angle = -90;
+    r_brake += 0.3;
+    if (r_brake > 100)
+        r_brake = 0;
 
-    tps += 1;
-    if (tps > 100)
-        tps = 0;
+    motor_vel_1 += 5;
+    if (motor_vel_1 > 5000)
+        motor_vel_1 = 0;
+    motor_current_1 += 0.05;
+    if (motor_current_1 > 60)
+        motor_current_1 = 40;
+    motor_temp_1 += 0.1;
+    if (motor_temp_1 > 90)
+        motor_temp_1 = 40;
+    motor_vel_2 += 10;
+    if (motor_vel_2 > 5000)
+        motor_vel_2 = 0;
+    motor_current_2 += 0.1;
+    if (motor_current_2 > 60)
+        motor_current_2 = 40;
+    motor_temp_2 += 0.2;
+    if (motor_temp_2 > 90)
+        motor_temp_2 = 40;
 
-    brake_front += 0.5;
-    if (brake_front > 100)
-        brake_front = 0;
-
-    brake_rear += 0.3;
-    if (brake_rear > 100)
-        brake_rear = 0;
-
-    wheel_speed_fl += 1;
-    wheel_speed_fr += 1.2;
-    wheel_speed_rl += 0.8;
-    wheel_speed_rr += 0.9;
-
-    if (wheel_speed_fl > 250)
-        wheel_speed_fl = 0;
-    if (wheel_speed_fr > 250)
-        wheel_speed_fr = 0;
-    if (wheel_speed_rl > 250)
-        wheel_speed_rl = 0;
-    if (wheel_speed_rr > 250)
-        wheel_speed_rr = 0;
-
-    motor_voltage += 0.1;
-    if (motor_voltage > 420)
-        motor_voltage = 380;
-
-    motor_current += 0.05;
-    if (motor_current > 60)
-        motor_current = 40;
-
-    motor_temp += 0.1;
-    if (motor_temp > 90)
-        motor_temp = 40;
+    drv_temp_1 += 0.1;
+    if (drv_temp_1 > 90)
+        drv_temp_1 = 40;
+    drv_temp_2 += 0.2;
+    if (drv_temp_2 > 90)
+        drv_temp_2 = 40;
+    battery_voltage_1 += 0.5;
+    if (battery_voltage_1 > 400)
+        battery_voltage_1 = 350;
+    battery_voltage_2 += 1;
+    if (battery_voltage_2 > 400)
+        battery_voltage_2 = 350;
 
     /* Simulate faults and drive state changes */
 
@@ -117,63 +214,62 @@ void vTestAppPeriodic(void)
 
     if ((sim_counter % 1000) == 0)
     {
-        motor1_fault = (motor1_fault + 1) % 6;
-        motor2_fault = (motor2_fault + 1) % 6;
-        drive_state = (drive_state + 1) % 3;
     }
 
-    /* Pack data into CAN messages */
+    /* Store the data in the message structures */
 
-    uint16_t *s = (uint16_t *)sensors_msg;
-    s[0] = (uint16_t)tps;
-    s[1] = (uint16_t)brake_front;
-    s[2] = (uint16_t)brake_rear;
-    s[3] = (uint16_t)(steering_angle + 180); // avoid negatives
+    tps_msg.xTPS1 = tps_1;
+    tps_msg.xTPS2 = tps_2;
 
-    uint16_t *w = (uint16_t *)wheel_speed_msg;
-    w[0] = (uint16_t)wheel_speed_fl;
-    w[1] = (uint16_t)wheel_speed_fr;
-    w[2] = (uint16_t)wheel_speed_rl;
-    w[3] = (uint16_t)wheel_speed_rr;
+    front_msg.xFLSpeed = fl_speed;
+    front_msg.xFRSpeed = fr_speed;
+    front_msg.xDirAngle = dir_angle + 180; // avoid negatives
+    front_msg.xFBrake = f_brake;
 
-    uint16_t *d = (uint16_t *)dynamic_msg;
-    d[0] = (uint16_t)rpm;
-    d[1] = (uint16_t)battery_voltage;
-    d[2] = (uint16_t)battery_current;
-    d[3] = 0;
+    current_msg.xAC1 = ac_1;
+    current_msg.xAC2 = ac_2;
+    current_msg.xDC1 = dc_1;
+    current_msg.xDC2 = dc_2;
 
-    uint16_t *m1 = (uint16_t *)motor1_msg;
-    m1[0] = (uint16_t)motor_voltage;
-    m1[1] = (uint16_t)motor_current;
-    m1[2] = (uint16_t)motor_temp;
-    m1[3] = 0;
+    rear_msg.xRBrake = r_brake;
 
-    uint16_t *m2 = (uint16_t *)motor2_msg;
-    m2[0] = (uint16_t)motor_voltage;
-    m2[1] = (uint16_t)motor_current;
-    m2[2] = (uint16_t)motor_temp;
-    m2[3] = 0;
+    motor_msg_1.xMotorVel = motor_vel_1;
+    motor_msg_1.xMotorCurrent = motor_current_1;
+    motor_msg_1.xMotorTemp = motor_temp_1;
+    motor_msg_2.xMotorVel = motor_vel_2;
+    motor_msg_2.xMotorCurrent = motor_current_2;
+    motor_msg_2.xMotorTemp = motor_temp_2;
 
-    status_msg[0] = motor1_fault;
-    status_msg[1] = motor2_fault;
-    status_msg[2] = drive_state;
-    status_msg[3] = 0;
-    status_msg[4] = 0;
-    status_msg[5] = 0;
-    status_msg[6] = 0;
-    status_msg[7] = 0;
+    drv_msg_1.xDrvTemp = drv_temp_1;
+    drv_msg_1.xVoltageDCBat = battery_voltage_1;
+    drv_msg_2.xDrvTemp = drv_temp_2;
+    drv_msg_2.xVoltageDCBat = battery_voltage_2;
 
-    /* Transmit CAN messages */
+    /* Pack data into CAN messages and transmit them */
 
-    canTransmit(canREG1, canMESSAGE_BOX17, sensors_msg);
-    canTransmit(canREG1, canMESSAGE_BOX18, wheel_speed_msg);
-    canTransmit(canREG1, canMESSAGE_BOX19, motor1_msg);
-    canTransmit(canREG1, canMESSAGE_BOX20, motor2_msg);
-    canTransmit(canREG1, canMESSAGE_BOX21, status_msg);
-    canTransmit(canREG1, canMESSAGE_BOX22, dynamic_msg);
+    dataPack(raw, &tps_msg, DATA_ID_TPS);
+    canTransmit(canREG1, canMESSAGE_BOX1, raw);
+    dataPack(raw, &front_msg, DATA_ID_FRONT);
+    canTransmit(canREG1, canMESSAGE_BOX2, raw);
+    dataPack(raw, &current_msg, DATA_ID_CURRENT);
+    canTransmit(canREG1, canMESSAGE_BOX3, raw);
+    dataPack(raw, &rear_msg, DATA_ID_REAR);
+    canTransmit(canREG1, canMESSAGE_BOX4, raw);
+    dataPack(raw, &motor_msg_1, DATA_ID_MOTOR1);
+    canTransmit(canREG1, canMESSAGE_BOX12, raw);
+    dataPack(raw, &motor_msg_2, DATA_ID_MOTOR2);
+    canTransmit(canREG1, canMESSAGE_BOX13, raw);
+    dataPack(raw, &drv_msg_1, DATA_ID_DRV1);
+    canTransmit(canREG1, canMESSAGE_BOX14, raw);
+    dataPack(raw, &drv_msg_2, DATA_ID_DRV2);
+    canTransmit(canREG1, canMESSAGE_BOX15, raw);
 
-    // if ((sim_counter % 5U) == 0U)
+    /* Receive CAN messages from Main ECU */
+
+    // if (canIsRxMessageArrived(canREG1, canMESSAGE_BOX5) == 1)
     // {
-    //     sciSend(sciREG, (uint32)sizeof(sci_tx_status_frame), sci_tx_status_frame);
+    //     canGetData(canREG1, canMESSAGE_BOX5, main_ecu_msg.raw);
+
+    //     /* Process Main ECU message */
     // }
 }

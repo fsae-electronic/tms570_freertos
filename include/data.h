@@ -4,30 +4,47 @@
 #include <stdint.h>
 
 /* CANOpen states */
-#define BOOTUP 0x00
-#define OPERATIONAL 0x05
-#define PRE_OPERATIONAL 0x7F
-#define STOPPED 0x04
+typedef enum
+{
+    BOOTUP = 0x00,
+    OPERATIONAL = 0x05,
+    PRE_OPERATIONAL = 0x7F,
+    STOPPED = 0x04
+} CANOpenState_t;
 
 /* Driver error codes */
-#define NO_FAULT 0x0000
-#define ERROR_CURRENT_A 0xFF01
-#define ERROR_CURRENT_B 0xFF02
-#define ERROR_HS_FET 0xFF03
-#define ERROR_LS_FET 0xFF04
-#define ERROR_DRV_LS_L1 0xFF05
-#define ERROR_DRV_LS_L2 0xFF06
-#define ERROR_DRV_LS_L3 0xFF07
-#define ERROR_DRV_HS_L1 0xFF08
-#define ERROR_DRV_HS_L2 0xFF09
-#define ERROR_DRV_HS_L3 0xFF0A
-#define ERROR_MOTOR_FEEDBACK 0xFF0B
-#define ERROR_DC_LINK_UNDERVOLTAGE 0xFF0C
-#define ERROR_PULS_MODE_FINISHED 0xFF0D
-#define ERROR_APP_ERROR 0xFF0E
-#define ERROR_STO_ERROR 0xFF0F
-#define ERROR_CONTROLLER_OVERTEMPERATURE 0xFF10
-#define ERROR_DC_LINK_OVERVOLTAGE 0x3210
+typedef enum
+{
+    NO_FAULT = 0x0000,
+    ERROR_CURRENT_A = 0xFF01,
+    ERROR_CURRENT_B,
+    ERROR_HS_FET,
+    ERROR_LS_FET,
+    ERROR_DRV_LS_L1,
+    ERROR_DRV_LS_L2,
+    ERROR_DRV_LS_L3,
+    ERROR_DRV_HS_L1,
+    ERROR_DRV_HS_L2,
+    ERROR_DRV_HS_L3,
+    ERROR_MOTOR_FEEDBACK,
+    ERROR_DC_LINK_UNDERVOLTAGE,
+    ERROR_PULS_MODE_FINISHED,
+    ERROR_APP_ERROR,
+    ERROR_STO_ERROR,
+    ERROR_CONTROLLER_OVERTEMPERATURE,
+    ERROR_DC_LINK_OVERVOLTAGE = 0x3210
+} DriverErrorCode_t;
+
+typedef enum
+{
+    CALIB_CMD_NONE,
+    CALIB_CMD_TPS_0,
+    CALIB_CMD_TPS_100,
+    CALIB_CMD_LEFT_STEER,
+    CALIB_CMD_CENTER_STEER,
+    CALIB_CMD_RIGHT_STEER,
+    CALIB_CMD_CURRENT_SENSORS
+} CalibrationCmd_t;
 
 /**************************************************************************************
  *                                                                                    *
@@ -114,203 +131,181 @@
  *                                                                                    *
  **************************************************************************************/
 
+typedef enum
+{
+    DATA_ID_TPS = 0x501,
+    DATA_ID_FRONT = 0x502,
+    DATA_ID_CURRENT = 0x503,
+    DATA_ID_REAR = 0x504,
+    DATA_ID_MAIN_ECU = 0x401,
+    DATA_ID_CALIB = 0x600,
+    DATA_ID_HEARTBEAT = 0x700,
+    DATA_ID_DRV_CTRL1 = 0x201,
+    DATA_ID_DRV_CTRL2 = 0x202,
+    DATA_ID_DRV_STATUS1 = 0x181,
+    DATA_ID_DRV_STATUS2 = 0x182,
+    DATA_ID_MOTOR1 = 0x281,
+    DATA_ID_MOTOR2 = 0x282,
+    DATA_ID_DRV1 = 0x381,
+    DATA_ID_DRV2 = 0x382
+} DataID_t;
+
+// typedef union
+// {
+//     uint8_t raw[4];
+
+//     struct
+//     {
+//         uint16_t xTPS1;
+//         uint16_t xTPS2;
+//     } values;
+// } DataTPS_t;
+
 typedef struct
 {
-    union
-    {
-        uint8_t raw[4];
+    // uint8_t raw[4];
 
-        struct
-        {
-            uint16_t xTPS1;
-            uint16_t xTPS2;
-        } values;
-    };
+    uint16_t xTPS1;
+    uint16_t xTPS2;
 } DataTPS_t;
 
 typedef struct
 {
-    union
-    {
-        uint8_t raw[8];
+    // uint8_t raw[8];
 
-        struct
-        {
-            uint16_t xFLSpeed;
-            uint16_t xFRSpeed;
-            uint16_t xDirAngle;
-            uint16_t xFBrake;
-        } values;
-    };
+    uint16_t xFLSpeed;
+    uint16_t xFRSpeed;
+    uint16_t xDirAngle;
+    uint16_t xFBrake;
 } DataFront_t;
 
 typedef struct
 {
-    union
-    {
-        uint8_t raw[8];
+    // uint8_t raw[8];
 
-        struct
-        {
-            uint16_t xAC1;
-            uint16_t xAC2;
-            uint16_t xDC1;
-            uint16_t xDC2;
-        } values;
-    };
+    uint16_t xAC1;
+    uint16_t xAC2;
+    uint16_t xDC1;
+    uint16_t xDC2;
 } DataCurrent_t;
 
 typedef struct
 {
-    union
-    {
-        uint8_t raw[2];
+    // uint8_t raw[2];
 
-        struct
-        {
-            uint16_t xRBrake;
-        } values;
-    };
+    uint16_t xRBrake;
 } DataRear_t;
 
 typedef struct
 {
-    union
-    {
-        uint8_t raw[6];
+    // uint8_t raw[6];
 
-        struct
-        {
-            uint8_t xTPS;
-            uint8_t xMode;
-            uint8_t xError;
-        } values;
-    };
+    uint8_t xTPS;
+    uint8_t xMode;
+    uint8_t xError;
 } DataMainECU_t;
 
 typedef struct
 {
-    union
-    {
-        uint8_t raw[7];
+    // uint8_t raw[7];
 
-        struct
-        {
-            uint8_t x_;
-            uint8_t xTPS0;
-            uint8_t xTPS100;
-            uint8_t xSteeringL;
-            uint8_t xSteeringC;
-            uint8_t xSteeringR;
-            uint8_t xCurrent;
-        } values;
-    };
+    // uint8_t x_;
+    // uint8_t xTPS0;
+    // uint8_t xTPS100;
+    // uint8_t xSteeringL;
+    // uint8_t xSteeringC;
+    // uint8_t xSteeringR;
+    // uint8_t xCurrent;
+
+    CalibrationCmd_t xCmd;
 } DataCalib_t;
 
 typedef struct
 {
-    union
-    {
-        uint8_t raw[1];
+    // uint8_t raw[1];
 
-        struct
-        {
-            uint8_t xCANOpenState;
-        } values;
-    };
+    uint8_t xCANOpenState;
 } DataHeartbeat_t;
 
 typedef struct
 {
-    union
-    {
-        uint8_t raw[4];
+    // uint8_t raw[4];
 
-        struct
-        {
-            uint16_t xCtrlWord;
-            uint16_t xTargetTorque;
-        } values;
-    };
+    uint16_t xCtrlWord;
+    uint16_t xTargetTorque;
 } DataDrvCtrl_t;
 
 typedef struct
 {
+    // uint8_t raw[8];
+
     union
     {
-        uint8_t raw[8];
-
+        uint16_t xStatusWord;
         struct
         {
-            union
-            {
-                uint16_t xStatusWord;
-                struct
-                {
-                    uint16_t xReady : 1;
-                    uint16_t xSwitchedOn : 1;
-                    uint16_t xOpEnabled : 1;
-                    uint16_t xFault : 1;
-                    uint16_t xVoltageEnabled : 1;
-                    uint16_t xQuickStop : 1;
-                    uint16_t xSwitchOnDisabled : 1;
-                    uint16_t xWarning : 1;
-                    uint16_t xReserved : 1;
-                    uint16_t xTargetReached : 1;
-                    uint16_t xLimitActive : 1;
-                } xStatusBits;
-            };
-            uint16_t xReserved;
-            union
-            {
-                uint16_t xWarnings;
-                struct
-                {
-                    uint16_t xControllerTemp : 1;
-                    uint16_t xMotorTemp : 1;
-                    uint16_t xDCUnderVoltage : 1;
-                    uint16_t xDCOverVoltage : 1;
-                    uint16_t xDCOverCurrent : 1;
-                    uint16_t xStallProtection : 1;
-                    uint16_t xMaxVelExceeded : 1;
-                    uint16_t xBMSProposedPwr : 1;
-                    uint16_t xCapacitorTemp : 1;
-                    uint16_t xI2TProtection : 1;
-                    uint16_t xFieldWeakening : 1;
-                } xWarningBits;
-            };
-            uint16_t xErrors;
-        } values;
+            uint16_t xReady : 1;
+            uint16_t xSwitchedOn : 1;
+            uint16_t xOpEnabled : 1;
+            uint16_t xFault : 1;
+            uint16_t xVoltageEnabled : 1;
+            uint16_t xQuickStop : 1;
+            uint16_t xSwitchOnDisabled : 1;
+            uint16_t xWarning : 1;
+            uint16_t xReserved : 1;
+            uint16_t xTargetReached : 1;
+            uint16_t xLimitActive : 1;
+        } xStatusBits;
     };
+    uint16_t xReserved;
+    union
+    {
+        uint16_t xWarnings;
+        struct
+        {
+            uint16_t xControllerTemp : 1;
+            uint16_t xMotorTemp : 1;
+            uint16_t xDCUnderVoltage : 1;
+            uint16_t xDCOverVoltage : 1;
+            uint16_t xDCOverCurrent : 1;
+            uint16_t xStallProtection : 1;
+            uint16_t xMaxVelExceeded : 1;
+            uint16_t xBMSProposedPwr : 1;
+            uint16_t xCapacitorTemp : 1;
+            uint16_t xI2TProtection : 1;
+            uint16_t xFieldWeakening : 1;
+        } xWarningBits;
+    };
+    uint16_t xErrors;
 } DataDrvStatus_t;
 
 typedef struct
 {
-    union
-    {
-        uint8_t raw[7];
+    // uint8_t raw[7];
 
-        struct
-        {
-            uint16_t xMotorVel;
-            uint32_t xMotorCurrent;
-            uint8_t xMotorTemp;
-        } values;
-    };
+    uint16_t xMotorVel;
+    uint32_t xMotorCurrent;
+    uint8_t xMotorTemp;
 } DataMotor_t;
 
 typedef struct
 {
-    union
-    {
-        uint8_t raw[3];
+    // uint8_t raw[3];
 
-        struct
-        {
-            uint8_t xDrvTemp;
-            uint16_t xVoltageDCBat;
-        } values;
-    };
+    uint8_t xDrvTemp;
+    uint16_t xVoltageDCBat;
 } DataDrv_t;
+
+
+/**
+ * @brief Pack/Unpack raw data from/into a structured format based on the data ID.
+ * @param raw Pointer to the raw data.
+ * @param values Pointer to the structured data.
+ * @param id The data ID.
+ * @note Prevents Alignment Fault / Data Abort errors and avoids performance penalties
+ *       associated with unaligned memory access.
+ */
+void dataPack(uint8_t *raw, void *values, DataID_t id);
+void dataUnpack(uint8_t *raw, void *values, DataID_t id);
 
 #endif /* _DATA_H_ */

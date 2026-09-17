@@ -41,66 +41,89 @@
  * Macro constants and definitions                                                    *
  * ---------------------------------------------------------------------------------- */
 
-#define PRIO_MAX (configMAX_PRIORITIES - 1U)
-#define TASK_STACK_WORDS(sz_bytes) ((sz_bytes) / sizeof(StackType_t))
-#define __FOREVER__ for (;;)
-
 #ifndef ENABLE_APP_TEST
 #define ENABLE_APP_TEST
 #endif
 
+#define PRIO_MAX (configMAX_PRIORITIES - 1U)
+#define TASK_STACK_WORDS(sz_bytes) ((sz_bytes) / sizeof(StackType_t))
+#define __FOREVER__ for (;;)
+
 /* Task priorities */
 #define PRIO_INIT PRIO_MAX    // Must perform setup
-#define PRIO_DATA_UPDATE (6U) // 60Hz data update from CAN
+#define PRIO_CAN_TX_RX (6U)   // 60Hz data update from CAN
 #define PRIO_RULES (5U)       // Compliance checking before actuation
-#define PRIO_RF_DATA_RX (4U)  // Receive and dispatch RF data
+#define PRIO_SCI_TX_RX (4U)   // Receive and dispatch RF data
 #define PRIO_DRIVERS_FSM (3U) // Drivers state machine
 #define PRIO_CMD (3U)         // Command intake affects drivers control
 #define PRIO_TELEMETRY (2U)   // 50Hz telemetry
 
 /* Task stack sizes */
 #define STACK_INIT TASK_STACK_WORDS(configMINIMAL_STACK_SIZE)
-#define STACK_DATA_UPDATE TASK_STACK_WORDS(512)
+#define STACK_CAN_TX_RX TASK_STACK_WORDS(512)
 #define STACK_RULES TASK_STACK_WORDS(512)
 #define STACK_DRIVERS_FSM TASK_STACK_WORDS(1024)
-#define STACK_RF_DATA_RX TASK_STACK_WORDS(512)
+#define STACK_SCI_TX_RX TASK_STACK_WORDS(512)
 #define STACK_CMD TASK_STACK_WORDS(512)
-#define STACK_TELEMETRY TASK_STACK_WORDS(512)
+#define STACK_TELEMETRY TASK_STACK_WORDS(1024)
 
-// Event flags (32 bits) ///////////////////////////////////////////////////////////////
+// SCI event flags /////////////////////////////////////////////////////////////////////
 
-/* CAN mailbox updates */
+/* RF data reception */
+#define EVT_SCI_TX_READY (1 << 1)
+#define EVT_SCI_RX_READY (1 << 0)
+#define EVT_SCI_CMD (1 << 2)
+#define EVT_SCI_TELEMETRY_ACK (1 << 3)
+#define EVT_SCI_TELEMETRY_NACK (1 << 4)
+
+/* Task ready flags */
+#define EVT_SCI_CMD_READY (1 << 7)
+#define EVT_SCI_TELEMETRY_READY (1 << 8)
+
+// System event flags //////////////////////////////////////////////////////////////////
+
+/* Periodic events */
+#define EVT_RTI_PERIODIC_TELEMETRY (1 << 9)
+
+/* Rule break events */
+#define EVT_APPS_RULE_BREAK (1 << 10)
+#define EVT_BSE_RULE_BREAK (1 << 11)
+// #define EVT_BP_RULE_BREAK (1 << 12)
+// #define STATE_SHUTDOWN (1 << 13) // Drivers state indicating shut down caused by an implausibility check
+
+/* Data ready for processing */
+#define EVT_CAN_NEW_DATA (1 << 15)
+#define EVT_CAN_DATA_APPROVED (1 << 16)
+
+// CAN event flags /////////////////////////////////////////////////////////////
+
+/* Mailbox updates */
 #define EVT_CAN_TPS (1 << 0)
 #define EVT_CAN_FRONT (1 << 1)
 #define EVT_CAN_CURRENT (1 << 2)
 #define EVT_CAN_REAR (1 << 3)
-#define EVT_CAN_HEARTBEAT (1 << 4)
-#define EVT_CAN_DRV_STATUS1 (1 << 5)
-#define EVT_CAN_DRV_STATUS2 (1 << 6)
-#define EVT_CAN_MOTOR1 (1 << 7)
-#define EVT_CAN_MOTOR2 (1 << 8)
-#define EVT_CAN_DRV1 (1 << 9)
-#define EVT_CAN_DRV2 (1 << 10)
-/* RF data reception */
-#define EVT_SCI_RX_READY (1 << 11)
-#define EVT_SCI_TX_READY (1 << 12)
-#define EVT_SCI_CMD (1 << 13)
-#define EVT_SCI_TELEMETRY_ACK (1 << 14)
-#define EVT_TELEMETRY_NACK (1 << 15)
-/* Data ready for processing */
-#define EVT_NEW_DATA (EVT_CAN_TPS | EVT_CAN_FRONT | EVT_CAN_CURRENT | EVT_CAN_REAR | EVT_CAN_HEARTBEAT | EVT_CAN_DRV_STATUS1 | EVT_CAN_DRV_STATUS2 | EVT_CAN_MOTOR1 | EVT_CAN_MOTOR2 | EVT_CAN_DRV1 | EVT_CAN_DRV2)
-#define EVT_DATA_UPDATE (1 << 16)
-#define EVT_DATA_APPROVED (1 << 17)
-/* Task ready flags */
-#define EVT_CMD_READY (1 << 20)
-#define EVT_TELEMETRY_READY (1 << 21)
-/* Periodic events */
-#define EVT_PERIODIC_TELEMETRY (1 << 25)
-/* Rule break events */
-#define EVT_APPS_RULE_BREAK (1 << 26)
-#define EVT_BSE_RULE_BREAK (1 << 27)
-// #define EVT_BP_RULE_BREAK (1 << 28)
-// #define STATE_SHUTDOWN (1 << 32) // Drivers state indicating shut down caused by an implausibility check
+#define EVT_CAN_MAIN_ECU (1 << 4)
+#define EVT_CAN_CALIB (1 << 5)
+#define EVT_CAN_HEARTBEAT (1 << 6)
+#define EVT_CAN_DRV_CTRL1 (1 << 7)
+#define EVT_CAN_DRV_CTRL2 (1 << 8)
+#define EVT_CAN_DRV_STATUS1 (1 << 9)
+#define EVT_CAN_DRV_STATUS2 (1 << 10)
+#define EVT_CAN_MOTOR1 (1 << 11)
+#define EVT_CAN_MOTOR2 (1 << 12)
+#define EVT_CAN_DRV1 (1 << 13)
+#define EVT_CAN_DRV2 (1 << 14)
+#define EVT_CAN_TX_DATA (EVT_CAN_MAIN_ECU | EVT_CAN_CALIB | EVT_CAN_DRV_CTRL1 | EVT_CAN_DRV_CTRL2)
+#define EVT_CAN_RX_DATA (EVT_CAN_TPS | EVT_CAN_FRONT | EVT_CAN_CURRENT | EVT_CAN_REAR |  \
+                         EVT_CAN_HEARTBEAT | EVT_CAN_DRV_STATUS1 | EVT_CAN_DRV_STATUS2 | \
+                         EVT_CAN_MOTOR1 | EVT_CAN_MOTOR2 | EVT_CAN_DRV1 | EVT_CAN_DRV2)
+
+/* Transmission complete */
+#define EVT_CAN_MAIN_ECU_TX (1 << 17)
+#define EVT_CAN_CALIB_TX (1 << 18)
+#define EVT_CAN_DRV_CTRL1_TX (1 << 19)
+#define EVT_CAN_DRV_CTRL2_TX (1 << 20)
+#define EVT_CAN_TX_READY (EVT_CAN_MAIN_ECU_TX | EVT_CAN_CALIB_TX | EVT_CAN_DRV_CTRL1_TX | EVT_CAN_DRV_CTRL2_TX)
 
 // CAN mailboxes ///////////////////////////////////////////////////////////////////////
 
@@ -109,9 +132,11 @@
 #define FRONT_MAILBOX canMESSAGE_BOX2   // Rx
 #define CURRENT_MAILBOX canMESSAGE_BOX3 // Rx
 #define REAR_MAILBOX canMESSAGE_BOX4    // Rx
+
 /* Main ECU */
 #define MAIN_ECU_MAILBOX canMESSAGE_BOX5 // Tx
 #define CALIB_MAILBOX canMESSAGE_BOX6    // Tx
+
 /* Drivers */
 #define HEARTBEAT_MAILBOX canMESSAGE_BOX7    // Rx
 #define DRV_CTRL1_MAILBOX canMESSAGE_BOX8    // Tx
@@ -140,19 +165,22 @@
 #define RTI_TELEMETRY_UPDATE rtiNOTIFICATION_COMPARE1
 
 /* Command reception */
-#define CMD_LENGTH 16U
+#define CMD_LENGTH (16U)
 
 /* SCI identifiers */
-#define CMD_ID 0x01
-#define TELEMETRY_ACK_ID 0x7E
+#define CMD_ID (0x01U)
+#define TELEMETRY_ACK_ID (0x7EU)
+#define TELEMETRY_NACK_ID (0x7FU)
 
 /* Implausibility checks */
-#define RB_APPS_THRESHOLD 10         // Max accelerator pedal travel deviation allowed
-#define RB_APPS_TIMEOUT_MS 100       // Time window to consider APPS implausibility valid
-#define RB_BSE_TIMEOUT_MS 100        // Time window to consider BSE implausibility valid
-#define RB_BP_BSE_THRESHOLD 90       // Max brake pedal travel allowed without mechanical actuation
-#define RB_BP_APPS_HIGH_THRESHOLD 25 // Max accelerator pedal travel allowed with mechanical brakes engaged
-#define RB_BP_APPS_LOW_THRESHOLD 5   // Max accelerator pedal travel allowed to release the shut down
+#define RB_APPS_THRESHOLD (10U)         // Max accelerator pedal travel deviation allowed
+#define RB_APPS_TIMEOUT_MS (100U)       // Time window to consider APPS implausibility valid
+#define RB_BSE_TIMEOUT_MS (100U)        // Time window to consider BSE implausibility valid
+#define RB_BP_BSE_THRESHOLD (90U)       // Max brake pedal travel allowed without mechanical actuation
+#define RB_BP_APPS_HIGH_THRESHOLD (25U) // Max accelerator pedal travel allowed with mechanical brakes engaged
+#define RB_BP_APPS_LOW_THRESHOLD (5U)   // Max accelerator pedal travel allowed to release the shut down
+
+#define QUEUE_LENGTH (10U)
 
 /* ---------------------------------------------------------------------------------- *
  * Enumerations, structures and typedefs                                              *
@@ -174,14 +202,30 @@ typedef enum
     APP_STATE_HARD_SHUTDOWN
 } AppState_t;
 
+typedef enum
+{
+    APP_CAN_MAIN_ECU_TX,
+    APP_CAN_DATA_RX,
+    APP_SCI_TELEMETRY_TX,
+    APP_SCI_TELEMETRY_RX,
+    APP_SCI_CMD_RX
+} AppEventType_t;
+
+/* Event object for queue sets */
+typedef struct
+{
+    AppEventType_t xEventType;
+    void *pvData;
+} AppEvent_t;
+
 /* Application tasks */
 typedef struct
 {
     TaskHandle_t xInitTask;
-    TaskHandle_t xDataUpdateTask;
+    TaskHandle_t xCANTxRxTask;
     TaskHandle_t xRulesTask;
     TaskHandle_t xDriversFSMTask;
-    TaskHandle_t xRFDataRxTask;
+    TaskHandle_t xSCITxRxTask;
     TaskHandle_t xCmdTask;
     TaskHandle_t xTelemetryTask;
 } AppTasks_t;
@@ -189,18 +233,24 @@ typedef struct
 /* Synchronization and inter-task communication */
 typedef struct
 {
-    /* No queues are needed because data is shared globally from the data and dashboard
-     * modules. Tasks can just read the latest data when they receive an event flag.
+    /* TODO: Data is shared globally but a simple queue is used to centralize ...
+     * Tasks can just read the latest data when they receive an event flag.
      */
-    EventGroupHandle_t xSysEvents; // Event flags
+    QueueHandle_t xEventQueue; // Queue for events
+    /* It is not possible to wait on the bits used by the kernel itself, defined by
+     * eventEVENT_BITS_CONTROL_BYTES. The maximum number of events allowed per group is 23.
+     */
+    EventGroupHandle_t xSysEvents; // Event flags for system events
+    EventGroupHandle_t xCANEvents; // Event flags for CAN data updates
     /* Tasks need data that is mutex locked for consistency, so to avoid blocking
      * updates and losing data, local copies should be used to maintain protected access
      * as short as possible.
      */
-    SemaphoreHandle_t xDataMutex;
-    // TimerHandle_t xInitTimer;       // Post scheduler initializations
-    // TimerHandle_t xPeriodicTimer;   // Periodic events
-    TimerHandle_t xTxTimeoutTimer;     // Telemetry transmission timeout
+    SemaphoreHandle_t xCANDataMutex; // Mutex for CAN data
+    SemaphoreHandle_t xSCIDataMutex; // Mutex for telemetry data
+    // TimerHandle_t xInitTimer;          // Post scheduler initializations
+    // TimerHandle_t xPeriodicTimer;      // Periodic events
+    // TimerHandle_t xTxTimeoutTimer;     // Telemetry transmission timeout
     TimerHandle_t xAPPSRuleBreakTimer; // Timer to track APPS rule breaks
     TimerHandle_t xBSERuleBreakTimer;  // Timer to track BSE rule breaks
 #ifdef ENABLE_APP_TEST
@@ -213,10 +263,10 @@ typedef struct
 {
     /* Task TCBs and stacks */
     StaticTask_t xInitTaskBuffer;
-    StaticTask_t xDataUpdateTaskBuffer;
+    StaticTask_t xCANTxRxTaskBuffer;
     StaticTask_t xRulesTaskBuffer;
     StaticTask_t xDriversFSMTaskBuffer;
-    StaticTask_t xRFDataRxTaskBuffer;
+    StaticTask_t xSCITxRxTaskBuffer;
     StaticTask_t xCmdTaskBuffer;
     StaticTask_t xTelemetryTaskBuffer;
     /* Proper alignment for the TMS570 MPU should be ensured by defining aligned stack
@@ -225,24 +275,29 @@ typedef struct
      * byte size.
      */
     StackType_t xInitStack[STACK_INIT];
-    StackType_t xDataUpdateStack[STACK_DATA_UPDATE];
+    StackType_t xCANTxRxStack[STACK_CAN_TX_RX];
     StackType_t xRulesStack[STACK_RULES];
     StackType_t xDriversFSMStack[STACK_DRIVERS_FSM];
-    StackType_t xRFDataRxStack[STACK_RF_DATA_RX];
+    StackType_t xSCITxRxStack[STACK_SCI_TX_RX];
     StackType_t xCmdStack[STACK_CMD];
     StackType_t xTelemetryStack[STACK_TELEMETRY];
 
     /* RTOS objects */
+    StaticQueue_t xEventQueueBuffer;
     StaticEventGroup_t xSysEventsBuffer;
-    StaticSemaphore_t xDataMutexBuffer;
+    StaticEventGroup_t xCANEventsBuffer;
+    StaticSemaphore_t xCANDataMutexBuffer;
+    StaticSemaphore_t xSCIDataMutexBuffer;
     // StaticTimer_t xInitTimerBuffer;
     // StaticTimer_t xPeriodicTimerBuffer;
-    StaticTimer_t xTxTimeoutTimerBuffer;
+    // StaticTimer_t xTxTimeoutTimerBuffer;
     StaticTimer_t xAPPSRuleBreakTimerBuffer;
     StaticTimer_t xBSERuleBreakTimerBuffer;
 #ifdef ENABLE_APP_TEST
     StaticTimer_t xAppTestTimerBuffer;
 #endif
+
+    uint8_t pucEventQueueStorageBuffer[QUEUE_LENGTH * sizeof(AppEvent_t)]; // Event queue buffer
 } AppResources_t;
 
 /* Data struct for local copies */
@@ -263,7 +318,17 @@ typedef struct
     DataMotor_t xMotor2;
     DataDrv_t xDrv1;
     DataDrv_t xDrv2;
-} AppData_t;
+} AppCANData_t;
+
+typedef struct
+{
+    // uint8_t xTxBuff[MAX_PAYLOAD_SIZE]; // Buffer for telemetry data to be sent
+    // uint8_t xTxLen;                    // Length of data to send
+    // uint8_t xRxBuff[MAX_PAYLOAD_SIZE]; // Buffer for telemetry data received
+    // uint8_t xRxLen;                    // Length of data received
+    XBeeAPIFrame_t xTxFrame[2]; // Ping-pong buffers
+    XBeeAPIFrame_t xRxFrame[2];
+} AppSCIData_t;
 
 /* Unified app context */
 typedef struct
@@ -273,7 +338,8 @@ typedef struct
     AppResources_t *xResources;
     AppTasks_t *xTasks;
     AppSync_t *xSync;
-    AppData_t *xData;
+    AppCANData_t *xCANData;
+    AppSCIData_t *xSCIData;
 } AppContext_t;
 
 /* ---------------------------------------------------------------------------------- *
@@ -352,7 +418,7 @@ static portTASK_FUNCTION_PROTO(vInitTask, pvParameters);
 static portTASK_FUNCTION_PROTO(vDataUpdateTask, pvParameters);
 static portTASK_FUNCTION_PROTO(vRulesTask, pvParameters);
 static portTASK_FUNCTION_PROTO(vDriversFSMTask, pvParameters);
-static portTASK_FUNCTION_PROTO(vRFDataRxTask, pvParameters);
+static portTASK_FUNCTION_PROTO(vSCITxRxTask, pvParameters);
 static portTASK_FUNCTION_PROTO(vCmdTask, pvParameters);
 static portTASK_FUNCTION_PROTO(vTelemetryTask, pvParameters);
 
@@ -369,7 +435,7 @@ static portTASK_FUNCTION_PROTO(vTelemetryTask, pvParameters);
  */
 // static void vInitTimerCallback(TimerHandle_t xTimer);
 // static void vPeriodicTimerCallback(TimerHandle_t xTimer);
-static void vTxTimeoutCallback(TimerHandle_t xTimer);
+// static void vTxTimeoutCallback(TimerHandle_t xTimer);
 static void vAPPSRuleBreakTimerCallback(TimerHandle_t xTimer);
 static void vBSERuleBreakTimerCallback(TimerHandle_t xTimer);
 #ifdef ENABLE_APP_TEST
@@ -383,16 +449,18 @@ static void vAppTestTimerCallback(TimerHandle_t xTimer);
 static AppResources_t xAppResources;
 static AppTasks_t xAppTasks;
 static AppSync_t xAppSync;
-static AppData_t xAppData;
+static AppCANData_t xAppCANData;
+static AppSCIData_t xAppSCIData;
 static AppContext_t xAppContext = {
     APP_RB_NONE,
     APP_STATE_INIT,
     &xAppResources,
     &xAppTasks,
     &xAppSync,
-    &xAppData};
+    &xAppCANData,
+    &xAppSCIData};
 
-/* Parsed XBee API frame data */
+// /* Parsed XBee API frame data */
 // static XBeeAPIParsedFrame_t xParsedFrame;
 
 /* TODO: Modify the xbee module to allow configurable addresses */
@@ -416,15 +484,15 @@ void vAppInit(void)
      * the call to vTaskStartScheduler(). The stacks of the created tasks contain a
      * status word with interrupts switched on so they will automatically get re-enabled
      * when the first task starts to run.
-     *
-     * To initialize peripherals that require interrupts, a dedicated init task can be
-     * used that performs the necessary setup and then deletes itself (see vInitTask).
-     * Alternatively, use a timer callback that runs once after scheduler start
-     * (see vInitTimerCallback).
      */
     // portENABLE_INTERRUPTS();
     // vAppInitModulesWithInterrupts();
     // portDISABLE_INTERRUPTS();
+    /* To initialize peripherals that require interrupts, a dedicated init task can be
+     * used that performs the necessary setup and then deletes itself (see vInitTask).
+     * Another option is a timer callback that runs once after scheduler start
+     * (see vInitTimerCallback).
+     */
 
     xAppContext.xState = APP_STATE_RUNNING;
 
@@ -439,18 +507,89 @@ void vAppRun(void)
 
 // Notifications ///////////////////////////////////////////////////////////////////////
 
-/* Notifications can be defined in notification.c, or be redefined externally thanks to
- * the WEAK pragma. If a link set contains both a weak definition (notification.c) and a
- * non-weak definition (e.g., App.cpp), the non-weak definition is always used. In
- * FreeRTOS, always use _FromISR APIs (interrupt safe) and the xHigherPriorityTaskWoken
- * parameter to request a context switch.
+/* _FromISR APIs (interrupt safe) and the xHigherPriorityTaskWoken parameter should be
+ * to update RTOS objects and request a context switch.
  */
 
-/**
- * @brief Callback for CAN interrupts
- * @param node CAN controller base address
- * @param messageBox Mailbox number that triggered the interrupt
- */
+void canErrorNotification(canBASE_t *node, uint32 notification)
+{
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    EventBits_t xEvent = 0U;
+    uint32_t uxLastError;
+
+    /* Handle CAN error notifications */
+    if (node == CAN_REG)
+    {
+        /* TODO: Implement CAN error handling (see can_wrappers.c) */
+
+        // /* Check the error level */
+        // switch (notification)
+        // {
+        // case canLEVEL_ACTIVE:
+        //     // Handle active state
+        //     break;
+        // case canLEVEL_PASSIVE:
+        //     // Handle passive state
+        //     break;
+        // case canLEVEL_WARNING:
+        //     // Handle warning state
+        //     break;
+        // case canLEVEL_BUS_OFF:
+        //     // Handle bus off state
+        //     break;
+        // case canLEVEL_PARITY_ERR:
+        //     // Handle parity error state
+        //     break;
+        // default:
+        //     break;
+        // }
+
+        // /* Check the Last Error Code (LEC) */
+        // uxLastError = canGetLastError(node);
+        // switch (uxLastError)
+        // {
+        // case canERROR_ACKNOWLEDGE: // Code 3: No node acknowledged the TX
+        //     // Handle ACK failure
+        //     break;
+        // case canERROR_BIT1: // Code 4: Sent a 1, read a 0
+        // case canERROR_BIT0: // Code 5: Sent a 0, read a 1
+        //     // Handle physical layer / bus contention errors
+        //     break;
+        // default:
+        //     break;
+        // }
+
+        // /* Check which mailbox is stuck waiting to transmit */
+        // uint32 txPending = canREG1->TXRQx[0]; // TXRQx[0] covers boxes 1 to 32
+
+        // if (txPending & (1U << (canMESSAGE_BOX1 - 1)))
+        // {
+        //     // Message Box 1 is currently failing/retrying its transmission
+        // }
+
+        /* Failed Tx does not trigger a notification, so ready flags must be set here */
+        if (!canIsTxMessagePending(node, MAIN_ECU_MAILBOX))
+            xEvent = EVT_CAN_MAIN_ECU_TX;
+        else if (!canIsTxMessagePending(node, CALIB_MAILBOX))
+            xEvent = EVT_CAN_CALIB_TX;
+        else if (!canIsTxMessagePending(node, DRV_CTRL1_MAILBOX))
+            xEvent = EVT_CAN_DRV_CTRL1_TX;
+        else if (!canIsTxMessagePending(node, DRV_CTRL2_MAILBOX))
+            xEvent = EVT_CAN_DRV_CTRL2_TX;
+    }
+
+    if (xEvent != 0U && xAppSync.xCANEvents != NULL)
+    {
+        if (xEventGroupSetBitsFromISR(xAppSync.xCANEvents, xEvent, &xHigherPriorityTaskWoken) == pdFAIL)
+        {
+            /* Handle error */
+        }
+
+        if (xHigherPriorityTaskWoken != pdFALSE)
+            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
+}
+
 void canMessageNotification(canBASE_t *node, uint32 messageBox)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -494,9 +633,45 @@ void canMessageNotification(canBASE_t *node, uint32 messageBox)
         case DRV2_MAILBOX:
             xEvent = EVT_CAN_DRV2;
             break;
+        case MAIN_ECU_MAILBOX:
+            xEvent = EVT_CAN_MAIN_ECU_TX;
+            break;
+        case CALIB_MAILBOX:
+            xEvent = EVT_CAN_CALIB_TX;
+            break;
         default:
             break;
         }
+    }
+
+    if ((xEvent != 0U) && (xAppSync.xCANEvents != NULL))
+    {
+        if (xEventGroupSetBitsFromISR(xAppSync.xCANEvents, xEvent, &xHigherPriorityTaskWoken) == pdFAIL)
+        {
+            /* Handle error */
+        }
+
+        if (xHigherPriorityTaskWoken != pdFALSE)
+            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
+}
+
+void canStatusChangeNotification(canBASE_t *node, uint32 notification)
+{
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    EventBits_t xEvent = 0U;
+
+    if (node == CAN_REG)
+    {
+        // /* Handle status change notifications */
+        // if ((notification & canLEVEL_RxOK) != 0U)
+        // {
+        //     xEvent = EVT_CAN_NEW_DATA; // New data received
+        // }
+        // else if ((notification & canLEVEL_TxOK) != 0U)
+        // {
+        //     xEvent = EVT_CAN_TX_READY; // Transmission completed
+        // }
     }
 
     if ((xEvent != 0U) && (xAppSync.xSysEvents != NULL))
@@ -511,10 +686,6 @@ void canMessageNotification(canBASE_t *node, uint32 messageBox)
     }
 }
 
-/**
- * @brief Callback for RTI interrupts
- * @param notification RTI notification type
- */
 void rtiNotification(uint32 notification)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -524,7 +695,7 @@ void rtiNotification(uint32 notification)
     switch (notification)
     {
     case RTI_TELEMETRY_UPDATE: // 50Hz
-        xEvent = EVT_PERIODIC_TELEMETRY;
+        xEvent = EVT_RTI_PERIODIC_TELEMETRY;
         break;
     default:
         break;
@@ -542,11 +713,6 @@ void rtiNotification(uint32 notification)
     }
 }
 
-/**
- * @brief Callback for SCI interrupts
- * @param sci SCI module base address
- * @param flags Status flags indicating the cause of the interrupt
- */
 void sciNotification(sciBASE_t *sci, uint32 flags)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -628,7 +794,7 @@ static void vAppInitModules(void)
     /* Enable peripheral callbacks */
     canEnableErrorNotification(CAN_REG);
     canEnableStatusChangeNotification(CAN_REG);
-    rtiEnableNotification(RTI_TELEMETRY_UPDATE);
+    // rtiEnableNotification(RTI_TELEMETRY_UPDATE);
     // sciEnableNotification(SCI_REG, SCI_TX_INT | SCI_RX_INT);
 
 #ifdef ENABLE_APP_TEST
@@ -642,6 +808,7 @@ static void vAppInitModules(void)
  */
 static void vAppInitModulesWithInterrupts(void)
 {
+    rtiEnableNotification(RTI_TELEMETRY_UPDATE);
     rtiStartCounter(rtiCOUNTER_BLOCK1); // Start RTI to generate periodic events
 
     /* Add initializations as needed */
@@ -662,27 +829,27 @@ static void vAppCreateTasks(AppContext_t *pxCtx)
         "Init",
         STACK_INIT,
         (void *)pxCtx,
-        PRIO_INIT,
+        PRIO_INIT | portPRIVILEGE_BIT,
         pxRes->xInitStack,
         &pxRes->xInitTaskBuffer);
     configASSERT(pxTasks->xInitTask != NULL);
 
-    pxTasks->xDataUpdateTask = xTaskCreateStatic(
-        vDataUpdateTask,
-        "DataUpdate",
-        STACK_DATA_UPDATE,
+    pxTasks->xCANTxRxTask = xTaskCreateStatic(
+        vCANTxRxTask,
+        "CANTxRx",
+        STACK_CAN_TX_RX,
         (void *)pxCtx,
-        PRIO_DATA_UPDATE,
-        pxRes->xDataUpdateStack,
-        &pxRes->xDataUpdateTaskBuffer);
-    configASSERT(pxTasks->xDataUpdateTask != NULL);
+        PRIO_CAN_TX_RX | portPRIVILEGE_BIT,
+        pxRes->xCANTxRxStack,
+        &pxRes->xCANTxRxTaskBuffer);
+    configASSERT(pxTasks->xCANTxRxTask != NULL);
 
     pxTasks->xRulesTask = xTaskCreateStatic(
         vRulesTask,
         "Rules",
         STACK_RULES,
         (void *)pxCtx,
-        PRIO_RULES,
+        PRIO_RULES | portPRIVILEGE_BIT,
         pxRes->xRulesStack,
         &pxRes->xRulesTaskBuffer);
     configASSERT(pxTasks->xRulesTask != NULL);
@@ -692,26 +859,26 @@ static void vAppCreateTasks(AppContext_t *pxCtx)
         "DriversFSM",
         STACK_DRIVERS_FSM,
         (void *)pxCtx,
-        PRIO_DRIVERS_FSM,
+        PRIO_DRIVERS_FSM | portPRIVILEGE_BIT,
         pxRes->xDriversFSMStack,
         &pxRes->xDriversFSMTaskBuffer);
     configASSERT(pxTasks->xDriversFSMTask != NULL);
 
-    pxTasks->xRFDataRxTask = xTaskCreateStatic(
-        vRFDataRxTask,
-        "RFDataRx",
-        STACK_RF_DATA_RX,
-        (void *)pxCtx,
-        PRIO_RF_DATA_RX,
-        pxRes->xRFDataRxStack,
-        &pxRes->xRFDataRxTaskBuffer);
+    // pxTasks->xSCITxRxTask = xTaskCreateStatic(
+    //     vSCITxRxTask,
+    //     "SCITxRx",
+    //     STACK_SCI_TX_RX,
+    //     (void *)pxCtx,
+    //     PRIO_SCI_TX_RX | portPRIVILEGE_BIT,
+    //     pxRes->xSCITxRxStack,
+    //     &pxRes->xSCITxRxTaskBuffer);
 
     pxTasks->xCmdTask = xTaskCreateStatic(
         vCmdTask,
         "Cmd",
         STACK_CMD,
         (void *)pxCtx,
-        PRIO_CMD,
+        PRIO_CMD | portPRIVILEGE_BIT,
         pxRes->xCmdStack,
         &pxRes->xCmdTaskBuffer);
     configASSERT(pxTasks->xCmdTask != NULL);
@@ -721,7 +888,7 @@ static void vAppCreateTasks(AppContext_t *pxCtx)
         "Telemetry",
         STACK_TELEMETRY,
         (void *)pxCtx,
-        PRIO_TELEMETRY,
+        PRIO_TELEMETRY | portPRIVILEGE_BIT,
         pxRes->xTelemetryStack,
         &pxRes->xTelemetryTaskBuffer);
     configASSERT(pxTasks->xTelemetryTask != NULL);
@@ -734,15 +901,31 @@ static void vAppCreateObjects(AppContext_t *pxCtx)
 
     configASSERT((pxRes != NULL) && (pxSync != NULL));
 
+    // /* Create event queue for inter-task communication */
+    // pxSync->xEventQueue = xQueueCreateStatic(
+    //     QUEUE_LENGTH,                       // Queue length
+    //     sizeof(AppEvent_t),                 // Item size
+    //     &pxRes->pucEventQueueStorageBuffer, // Buffer
+    //     &pxRes->xEventQueueBuffer);         // Queue structure
+    // configASSERT(pxSync->xEventQueue != NULL);
+
     /* Create event group for synchronization flags */
     pxSync->xSysEvents = xEventGroupCreateStatic(&pxRes->xSysEventsBuffer);
     configASSERT(pxSync->xSysEvents != NULL);
 
-    /* Create mutex for data */
-    pxSync->xDataMutex = xSemaphoreCreateMutexStatic(&pxRes->xDataMutexBuffer);
-    configASSERT(pxSync->xDataMutex != NULL);
+    /* Create event group for data update flags */
+    pxSync->xCANEvents = xEventGroupCreateStatic(&pxRes->xCANEventsBuffer);
+    configASSERT(pxSync->xCANEvents != NULL);
 
-    /* Timer that starts after vTaskStartScheduler (interrupts enabled) */
+    /* Create mutex for CAN data */
+    pxSync->xCANDataMutex = xSemaphoreCreateMutexStatic(&pxRes->xCANDataMutexBuffer);
+    configASSERT(pxSync->xCANDataMutex != NULL);
+
+    /* Create mutex for telemetry data */
+    pxSync->xSCIDataMutex = xSemaphoreCreateMutexStatic(&pxRes->xSCIDataMutexBuffer);
+    configASSERT(pxSync->xSCIDataMutex != NULL);
+
+    // /* Timer that starts after vTaskStartScheduler (interrupts enabled) */
     // pxSync->xInitTimer = xTimerCreate("InitTimer",
     //                                   1,
     //                                   pdFALSE,
@@ -751,7 +934,7 @@ static void vAppCreateObjects(AppContext_t *pxCtx)
     // configASSERT(pxSync->xInitTimer != NULL);
     // xTimerStart(pxSync->xInitTimer, 0);
 
-    /* Timer for periodic events if RTI notifications are not used */
+    // /* Timer for periodic events if RTI notifications are not used */
     // pxSync->xPeriodicTimer = xTimerCreate("PeriodicTimer",
     //                                       pdMS_TO_TICKS(10),
     //                                       pdTRUE,
@@ -760,13 +943,13 @@ static void vAppCreateObjects(AppContext_t *pxCtx)
     // configASSERT(pxSync->xPeriodicTimer != NULL);
     // xTimerStart(pxSync->xPeriodicTimer, 0);
 
-    /* Timer for telemetry transmission timeout */
-    pxSync->xTxTimeoutTimer = xTimerCreate("TxTimeoutTimer",
-                                           pdMS_TO_TICKS(5),
-                                           pdFALSE,
-                                           NULL,
-                                           vTxTimeoutCallback);
-    configASSERT(pxSync->xTxTimeoutTimer != NULL);
+    // /* Timer for telemetry transmission timeout */
+    // pxSync->xTxTimeoutTimer = xTimerCreate("TxTimeoutTimer",
+    //                                        pdMS_TO_TICKS(5),
+    //                                        pdFALSE,
+    //                                        NULL,
+    //                                        vTxTimeoutCallback);
+    // configASSERT(pxSync->xTxTimeoutTimer != NULL);
 
     /* Timer to track APPS rule breaks */
     pxSync->xAPPSRuleBreakTimer = xTimerCreate("APPSRuleBreakTimer",
@@ -809,77 +992,205 @@ static portTASK_FUNCTION(vInitTask, pvParameters)
     vTaskDelete(NULL);
 }
 
-static portTASK_FUNCTION(vDataUpdateTask, pvParameters)
+static portTASK_FUNCTION(vCANTxRxTask, pvParameters)
 {
     AppContext_t *pxCtx = (AppContext_t *)pvParameters;
     AppSync_t *pxSync = pxCtx->xSync;
-    AppData_t *pxData = pxCtx->xData, xLocalData;
+    AppCANData_t *pxCANData = pxCtx->xCANData, xLocalData;
+    AppRuleBreak_t *pxRuleBreak = &pxCtx->xRuleBreak;
     EventBits_t uxBits;
+    uint8_t raw[8]; // Temporary buffer for CAN data
 
     __FOREVER__
     {
-        /* Wait for data update event */
+        /* Wait for data update events */
         uxBits = xEventGroupWaitBits(
-            pxSync->xSysEvents,
-            EVT_DATA_UPDATE,
-            pdTRUE,  // Clear bits after return
+            pxSync->xCANEvents,
+            EVT_CAN_TX_DATA | EVT_CAN_RX_DATA,
+            // pdTRUE,  // Clear bits after return
+            pdFALSE,
             pdFALSE, // Wait for any bit
             portMAX_DELAY);
 
-        if ((uxBits & EVT_DATA_UPDATE) != 0U)
+        if ((uxBits & EVT_CAN_TX_DATA) != 0U)
+        {
+            if (xSemaphoreTake(pxSync->xCANDataMutex, pdMS_TO_TICKS(portMAX_DELAY)) == pdTRUE)
+            {
+                if (uxBits & EVT_CAN_MAIN_ECU)
+                {
+                    xLocalData.xMainECU = pxCANData->xMainECU;
+                    uxBits |= EVT_CAN_MAIN_ECU_TX;
+                }
+                if (uxBits & EVT_CAN_CALIB)
+                {
+                    xLocalData.xCalib = pxCANData->xCalib;
+                    uxBits |= EVT_CAN_CALIB_TX;
+                }
+                if (uxBits & EVT_CAN_DRV_CTRL1)
+                {
+                    xLocalData.xDrvCtrl1 = pxCANData->xDrvCtrl1;
+                    uxBits |= EVT_CAN_DRV_CTRL1_TX;
+                }
+                if (uxBits & EVT_CAN_DRV_CTRL2)
+                {
+                    xLocalData.xDrvCtrl2 = pxCANData->xDrvCtrl2;
+                    uxBits |= EVT_CAN_DRV_CTRL2_TX;
+                }
+
+                // memset(&pxCANData->xMainECU, 0, sizeof(pxCANData->xMainECU));
+
+                if (xSemaphoreGive(pxSync->xCANDataMutex) == pdTRUE)
+                {
+                    xEventGroupClearBits(pxSync->xCANEvents, EVT_CAN_TX_DATA);
+                    uxBits &= !EVT_CAN_TX_DATA;
+                }
+                else
+                {
+                    /* We would not expect this call to fail because we must have
+                     * obtained the semaphore to get here.
+                     */
+                }
+            }
+
+            uxBits = xEventGroupWaitBits(
+                pxSync->xSysEvents,
+                // EVT_CAN_TX_READY,
+                uxBits,
+                pdTRUE, // Clear bits after return
+                // pdFALSE, // Wait for any bit
+                pdTRUE,
+                portMAX_DELAY);
+
+            if (uxBits & EVT_CAN_MAIN_ECU_TX)
+            {
+                dataPack(raw, &xLocalData.xMainECU, DATA_ID_MAIN_ECU);
+                canTransmit(canREG1, MAIN_ECU_MAILBOX, raw);
+            }
+            if (uxBits & EVT_CAN_CALIB_TX)
+            {
+                dataPack(raw, &xLocalData.xCalib, DATA_ID_CALIB);
+                canTransmit(canREG1, CALIB_MAILBOX, raw);
+            }
+            if (uxBits & EVT_CAN_DRV_CTRL1_TX)
+            {
+                dataPack(raw, &xLocalData.xDrvCtrl1, DATA_ID_DRV_CTRL1);
+                canTransmit(canREG1, DRV_CTRL1_MAILBOX, raw);
+            }
+            if (uxBits & EVT_CAN_DRV_CTRL2_TX)
+            {
+                dataPack(raw, &xLocalData.xDrvCtrl2, DATA_ID_DRV_CTRL2);
+                canTransmit(canREG1, DRV_CTRL2_MAILBOX, raw);
+            }
+            // {
+            //     if (canTransmit(canREG1, DRV_CTRL2_MAILBOX, xLocalData.xDrvCtrl2.raw) != 1U)
+            //     {
+            //         /* Handle error */
+            //         // uint32_t uTxError = canGetLastError(canREG1);
+
+            //         /* Prepare for retransmission */
+            //         xEventGroupClearBits(pxSync->xSysEvents, EVT_CAN_DRV_CTRL2);
+            //     }
+            // }
+            // /* TODO: TxReady flag should be set if every transmission failed */
+            // xEventGroupSetBits(pxSync->xSysEvents, EVT_CAN_TX_READY);
+        }
+        if ((uxBits & EVT_CAN_RX_DATA) != 0U)
         {
             /* Read new frames and update local fields */
             if (uxBits & EVT_CAN_TPS)
-                canGetData(canREG1, TPS_MAILBOX, xLocalData.xTPS.raw);
+            {
+                canGetData(canREG1, TPS_MAILBOX, raw);
+                dataUnpack(raw, &xLocalData.xTPS, DATA_ID_TPS);
+            }
             if (uxBits & EVT_CAN_FRONT)
-                canGetData(canREG1, FRONT_MAILBOX, xLocalData.xFront.raw);
+            {
+                canGetData(canREG1, FRONT_MAILBOX, raw);
+                dataUnpack(raw, &xLocalData.xFront, DATA_ID_FRONT);
+            }
             if (uxBits & EVT_CAN_CURRENT)
-                canGetData(canREG1, CURRENT_MAILBOX, xLocalData.xCurrent.raw);
+            {
+                canGetData(canREG1, CURRENT_MAILBOX, raw);
+                dataUnpack(raw, &xLocalData.xCurrent, DATA_ID_CURRENT);
+            }
             if (uxBits & EVT_CAN_REAR)
-                canGetData(canREG1, REAR_MAILBOX, xLocalData.xRear.raw);
+            {
+                canGetData(canREG1, REAR_MAILBOX, raw);
+                dataUnpack(raw, &xLocalData.xRear, DATA_ID_REAR);
+            }
             if (uxBits & EVT_CAN_HEARTBEAT)
-                canGetData(canREG1, HEARTBEAT_MAILBOX, xLocalData.xHeartbeat.raw);
+            {
+                canGetData(canREG1, HEARTBEAT_MAILBOX, raw);
+                dataUnpack(raw, &xLocalData.xHeartbeat, DATA_ID_HEARTBEAT);
+            }
             if (uxBits & EVT_CAN_DRV_STATUS1)
-                canGetData(canREG1, DRV_STATUS1_MAILBOX, xLocalData.xDrvStatus1.raw);
+            {
+                canGetData(canREG1, DRV_STATUS1_MAILBOX, raw);
+                dataUnpack(raw, &xLocalData.xDrvStatus1, DATA_ID_DRV_STATUS1);
+            }
             if (uxBits & EVT_CAN_DRV_STATUS2)
-                canGetData(canREG1, DRV_STATUS2_MAILBOX, xLocalData.xDrvStatus2.raw);
+            {
+                canGetData(canREG1, DRV_STATUS2_MAILBOX, raw);
+                dataUnpack(raw, &xLocalData.xDrvStatus2, DATA_ID_DRV_STATUS2);
+            }
             if (uxBits & EVT_CAN_MOTOR1)
-                canGetData(canREG1, MOTOR1_MAILBOX, xLocalData.xMotor1.raw);
+            {
+                canGetData(canREG1, MOTOR1_MAILBOX, raw);
+                dataUnpack(raw, &xLocalData.xMotor1, DATA_ID_MOTOR1);
+            }
             if (uxBits & EVT_CAN_MOTOR2)
-                canGetData(canREG1, MOTOR2_MAILBOX, xLocalData.xMotor2.raw);
+            {
+                canGetData(canREG1, MOTOR2_MAILBOX, raw);
+                dataUnpack(raw, &xLocalData.xMotor2, DATA_ID_MOTOR2);
+            }
             if (uxBits & EVT_CAN_DRV1)
-                canGetData(canREG1, DRV1_MAILBOX, xLocalData.xDrv1.raw);
+            {
+                canGetData(canREG1, DRV1_MAILBOX, raw);
+                dataUnpack(raw, &xLocalData.xDrv1, DATA_ID_DRV1);
+            }
             if (uxBits & EVT_CAN_DRV2)
-                canGetData(canREG1, DRV2_MAILBOX, xLocalData.xDrv2.raw);
+            {
+                canGetData(canREG1, DRV2_MAILBOX, raw);
+                dataUnpack(raw, &xLocalData.xDrv2, DATA_ID_DRV2);
+            }
+            /* TODO: Handle Rx errors and lost messages */
 
             /* Update global data */
-            if (xSemaphoreTake(pxSync->xDataMutex, pdMS_TO_TICKS(portMAX_DELAY)) == pdTRUE)
+            if (xSemaphoreTake(pxSync->xCANDataMutex, pdMS_TO_TICKS(portMAX_DELAY)) == pdTRUE)
             {
                 if (uxBits & EVT_CAN_TPS)
-                    pxData->xTPS = xLocalData.xTPS;
+                    pxCANData->xTPS = xLocalData.xTPS;
                 if (uxBits & EVT_CAN_FRONT)
-                    pxData->xFront = xLocalData.xFront;
+                    pxCANData->xFront = xLocalData.xFront;
                 if (uxBits & EVT_CAN_CURRENT)
-                    pxData->xCurrent = xLocalData.xCurrent;
+                    pxCANData->xCurrent = xLocalData.xCurrent;
                 if (uxBits & EVT_CAN_REAR)
-                    pxData->xRear = xLocalData.xRear;
+                    pxCANData->xRear = xLocalData.xRear;
                 if (uxBits & EVT_CAN_HEARTBEAT)
-                    pxData->xHeartbeat = xLocalData.xHeartbeat;
+                    pxCANData->xHeartbeat = xLocalData.xHeartbeat;
                 if (uxBits & EVT_CAN_DRV_STATUS1)
-                    pxData->xDrvStatus1 = xLocalData.xDrvStatus1;
+                    pxCANData->xDrvStatus1 = xLocalData.xDrvStatus1;
                 if (uxBits & EVT_CAN_DRV_STATUS2)
-                    pxData->xDrvStatus2 = xLocalData.xDrvStatus2;
+                    pxCANData->xDrvStatus2 = xLocalData.xDrvStatus2;
                 if (uxBits & EVT_CAN_MOTOR1)
-                    pxData->xMotor1 = xLocalData.xMotor1;
+                    pxCANData->xMotor1 = xLocalData.xMotor1;
                 if (uxBits & EVT_CAN_MOTOR2)
-                    pxData->xMotor2 = xLocalData.xMotor2;
+                    pxCANData->xMotor2 = xLocalData.xMotor2;
                 if (uxBits & EVT_CAN_DRV1)
-                    pxData->xDrv1 = xLocalData.xDrv1;
+                    pxCANData->xDrv1 = xLocalData.xDrv1;
                 if (uxBits & EVT_CAN_DRV2)
-                    pxData->xDrv2 = xLocalData.xDrv2;
+                    pxCANData->xDrv2 = xLocalData.xDrv2;
 
-                xSemaphoreGive(pxSync->xDataMutex);
-                xEventGroupSetBits(pxSync->xSysEvents, EVT_NEW_DATA);
+                if (xSemaphoreGive(pxSync->xCANDataMutex) == pdTRUE)
+                {
+                    xEventGroupClearBits(pxSync->xCANEvents, EVT_CAN_RX_DATA);
+                    xEventGroupSetBits(pxSync->xSysEvents, EVT_CAN_NEW_DATA);
+                }
+                else
+                {
+                    /* We would not expect this call to fail because we must have
+                     * obtained the semaphore to get here.
+                     */
+                }
             }
         }
     }
@@ -893,7 +1204,7 @@ static portTASK_FUNCTION(vRulesTask, pvParameters)
     AppRuleBreak_t *pxRuleBreak = &pxCtx->xRuleBreak;
     AppState_t *pxState = &pxCtx->xState;
     AppSync_t *pxSync = pxCtx->xSync;
-    AppData_t *pxData = pxCtx->xData;
+    AppCANData_t *pxCANData = pxCtx->xCANData;
     EventBits_t uxBits;
     struct
     {
@@ -908,12 +1219,12 @@ static portTASK_FUNCTION(vRulesTask, pvParameters)
         /* Wait for new data event */
         uxBits = xEventGroupWaitBits(
             pxSync->xSysEvents,
-            EVT_NEW_DATA | EVT_APPS_RULE_BREAK | EVT_BSE_RULE_BREAK,
+            EVT_CAN_NEW_DATA | EVT_APPS_RULE_BREAK | EVT_BSE_RULE_BREAK,
             pdTRUE,  // Clear bits after return
             pdFALSE, // Wait for any bit
             portMAX_DELAY);
 
-        /* TODO: Check rule break handling */
+        /* TODO: Check implausibilities */
         if ((uxBits & EVT_APPS_RULE_BREAK) != 0U)
         {
             *pxRuleBreak = APP_RB_APPS;
@@ -924,17 +1235,17 @@ static portTASK_FUNCTION(vRulesTask, pvParameters)
             *pxRuleBreak = APP_RB_BSE;
             *pxState = APP_STATE_HARD_SHUTDOWN;
         }
-        else if (((uxBits & EVT_NEW_DATA) != 0U) && (*pxState != APP_STATE_HARD_SHUTDOWN))
+        else if (((uxBits & EVT_CAN_NEW_DATA) != 0U) && (*pxState != APP_STATE_HARD_SHUTDOWN))
         {
             /* Local copy of the fields that need rule checking */
-            if (xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
+            if (xSemaphoreTake(pxSync->xCANDataMutex, portMAX_DELAY) == pdTRUE)
             {
-                xLocalData.xAPPS1 = pxData->xTPS.values.xTPS1;
-                xLocalData.xAPPS2 = pxData->xTPS.values.xTPS2;
-                xLocalData.xFBrake = pxData->xFront.values.xFBrake;
+                xLocalData.xAPPS1 = pxCANData->xTPS.xTPS1;
+                xLocalData.xAPPS2 = pxCANData->xTPS.xTPS2;
+                xLocalData.xFBrake = pxCANData->xFront.xFBrake;
                 /* ... */
 
-                xSemaphoreGive(pxSync->xDataMutex);
+                xSemaphoreGive(pxSync->xCANDataMutex);
 
                 /* Check APPS implausibility */
                 if ((xLocalData.xAPPS1 - xLocalData.xAPPS2) > RB_APPS_THRESHOLD)
@@ -948,7 +1259,7 @@ static portTASK_FUNCTION(vRulesTask, pvParameters)
                     xTimerStop(pxSync->xAPPSRuleBreakTimer, portMAX_DELAY);
                 }
 
-                /* TODO: Check BSE implausibility */
+                // /* TODO: Check BSE implausibility */
                 // if (/* ... */)
                 // {
                 //     /* Start BSE rule break timer */
@@ -963,14 +1274,16 @@ static portTASK_FUNCTION(vRulesTask, pvParameters)
                 /* Check BP implausibility */
                 if ((*pxState != APP_STATE_SOFT_SHUTDOWN) &&
                     (xLocalData.xFBrake > RB_BP_BSE_THRESHOLD) &&
-                    ((xLocalData.xAPPS1 > RB_BP_APPS_HIGH_THRESHOLD) || (xLocalData.xAPPS2 > RB_BP_APPS_HIGH_THRESHOLD)))
+                    ((xLocalData.xAPPS1 > RB_BP_APPS_HIGH_THRESHOLD) ||
+                     (xLocalData.xAPPS2 > RB_BP_APPS_HIGH_THRESHOLD)))
                 {
                     // xEventGroupSetBits(pxSync->xSysEvents, EVT_BP_RULE_BREAK);
                     *pxRuleBreak = APP_RB_BP;
                     *pxState = APP_STATE_SOFT_SHUTDOWN;
                 }
                 else if ((*pxState == APP_STATE_SOFT_SHUTDOWN) &&
-                         (xLocalData.xAPPS1 < RB_BP_APPS_LOW_THRESHOLD) && (xLocalData.xAPPS2 < RB_BP_APPS_LOW_THRESHOLD))
+                         (xLocalData.xAPPS1 < RB_BP_APPS_LOW_THRESHOLD) &&
+                         (xLocalData.xAPPS2 < RB_BP_APPS_LOW_THRESHOLD))
                 {
                     /* Clear rule break and return to running state */
                     *pxRuleBreak = APP_RB_NONE;
@@ -979,11 +1292,14 @@ static portTASK_FUNCTION(vRulesTask, pvParameters)
 
                 if (*pxRuleBreak == APP_RB_NONE)
                 {
-                    xEventGroupSetBits(pxSync->xSysEvents, EVT_DATA_APPROVED);
+                    xEventGroupSetBits(pxSync->xSysEvents, EVT_CAN_DATA_APPROVED);
                 }
-
-                /* TODO: Send rulebreaks via CAN */
             }
+
+            pxCANData->xMainECU.xTPS = xLocalData.xAPPS1;
+            pxCANData->xMainECU.xMode = 0;
+            pxCANData->xMainECU.xError = *pxRuleBreak;
+            xEventGroupSetBits(pxSync->xCANEvents, EVT_CAN_MAIN_ECU);
         }
     }
 
@@ -994,7 +1310,7 @@ static portTASK_FUNCTION(vDriversFSMTask, pvParameters)
 {
     AppContext_t *pxCtx = (AppContext_t *)pvParameters;
     AppSync_t *pxSync = pxCtx->xSync;
-    AppData_t *pxData = pxCtx->xData;
+    AppCANData_t *pxCANData = pxCtx->xCANData;
     EventBits_t uxBits;
     struct
     {
@@ -1010,23 +1326,25 @@ static portTASK_FUNCTION(vDriversFSMTask, pvParameters)
         /* Wait for new approved data */
         uxBits = xEventGroupWaitBits(
             pxSync->xSysEvents,
-            EVT_DATA_APPROVED,
-            pdTRUE,  // Clear bits after return
+            EVT_CAN_DATA_APPROVED,
+            // pdTRUE,  // Clear bits after return
+            pdFALSE,
             pdFALSE, // Wait for any bit
             portMAX_DELAY);
 
-        if ((uxBits & EVT_DATA_APPROVED) != 0U)
+        if ((uxBits & EVT_CAN_DATA_APPROVED) != 0U)
         {
             /* Local copy of control-related state */
-            if (xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
+            if (xSemaphoreTake(pxSync->xCANDataMutex, portMAX_DELAY) == pdTRUE)
             {
-                xLocalData.xMotorVelocity1 = pxData->xMotor1.values.xMotorVel;
-                xLocalData.xMotorVelocity2 = pxData->xMotor2.values.xMotorVel;
-                xLocalData.xMotorTemp1 = pxData->xDrv1.values.xDrvTemp;
-                xLocalData.xMotorTemp2 = pxData->xDrv2.values.xDrvTemp;
+                xLocalData.xMotorVelocity1 = pxCANData->xMotor1.xMotorVel;
+                xLocalData.xMotorVelocity2 = pxCANData->xMotor2.xMotorVel;
+                xLocalData.xMotorTemp1 = pxCANData->xDrv1.xDrvTemp;
+                xLocalData.xMotorTemp2 = pxCANData->xDrv2.xDrvTemp;
                 /* ... */
 
-                xSemaphoreGive(pxSync->xDataMutex);
+                xSemaphoreGive(pxSync->xCANDataMutex);
+                xEventGroupClearBits(pxSync->xSysEvents, EVT_CAN_DATA_APPROVED);
 
                 ////////////////////////////////////////////
                 // TODO: Placeholder for driver FSM logic //
@@ -1038,168 +1356,200 @@ static portTASK_FUNCTION(vDriversFSMTask, pvParameters)
     vTaskDelete(NULL);
 }
 
-static portTASK_FUNCTION(vRFDataRxTask, pvParameters)
+static portTASK_FUNCTION(vSCITxRxTask, pvParameters)
 {
     AppContext_t *pxCtx = (AppContext_t *)pvParameters;
     AppSync_t *pxSync = pxCtx->xSync;
+    AppSCIData_t *pxSCIData = pxCtx->xSCIData;
     EventBits_t uxBits;
-    /* TODO: Checksum length should be in xbee.h */
-    uint8_t xRxBuff[MAX_PAYLOAD_SIZE + 1], xId, err = 0; // Buffer for RF data
-    uint16_t xRxLen;                                     // Length of received data
+    uint8_t xTxBuff[XBEE_API_MAX_FRAME_SZ], xRxBuff[XBEE_API_MAX_FRAME_SZ]; // Buffers for RF data
+    uint8_t xId, err = 0;
+    // uint16_t xRxLen; // Length of received data
+    // XBeeAPIStatus_t xStatus = XBEE_API_RX_ERROR_NO_DATA;
     XBeeAPIStatus_t xStatus;
-    XBeeAPIParsedFrame_t xParsedFrame;
+    XBeeAPIFrame_t xTxFrame, xRxFrame;
     msgpack_unpacked msg;
     msgpack_unpacker unp;
     msgpack_unpack_return ret;
     msgpack_object obj;
+    msgpack_object_bin obj_bin;
     cobs_decode_result result;
+    // bool xSetupRx = true;
+
+    /* Setup RF data reception */
+    sciReceive(SCI_REG, 1, xRxFrame.buffer);
 
     __FOREVER__
     {
-        /* Avoid starting a new transfer before the previous one is handled */
-        // uxBits = xEventGroupWaitBits(
-        //     pxSync->xSysEvents,
-        //     EVT_CMD_READY | EVT_TELEMETRY_READY, // Wait if either is busy
-        //     pdTRUE,                              // Clear bits after return
-        //     pdTRUE,                              // Wait for all bits
-        //     portMAX_DELAY);
-
-        /* Setup RF data reception */
-        sciReceive(SCI_REG, 1, xRxBuff);
+        // if (xSetupRx)
+        // {
+        //     /* Setup RF data reception */
+        //     sciReceive(SCI_REG, 1, xRxBuff);
+        //     xSetupRx = false;
+        // }
 
         /* Wait for the transfer to start */
         uxBits = xEventGroupWaitBits(
             pxSync->xSysEvents,
-            EVT_SCI_RX_READY,
+            EVT_SCI_TELEMETRY_READY | EVT_SCI_RX_READY,
             pdTRUE,  // Clear bits after return
             pdFALSE, // Wait for any bit
             portMAX_DELAY);
 
+        if ((uxBits & EVT_SCI_TELEMETRY_READY) != 0U)
+        {
+            if (xSemaphoreTake(pxSync->xSCIDataMutex, portMAX_DELAY) == pdTRUE)
+            {
+                /* TODO: Switch sync type to event driven */
+                // memcpy(xTxBuff, pxSCIData->xTxBuff, pxSCIData->xTxLen);
+                memcpy(xTxFrame.buffer, pxSCIData->xTxFrame->buffer, pxSCIData->xTxFrame->length);
+
+                xSemaphoreGive(pxSync->xSCIDataMutex);
+
+                uxBits = xEventGroupWaitBits(
+                    pxSync->xSysEvents,
+                    EVT_SCI_TX_READY,
+                    pdTRUE,  // Clear bits after return
+                    pdFALSE, // Wait for any bit
+                    portMAX_DELAY);
+
+                if ((uxBits & EVT_SCI_TX_READY) != 0U)
+                {
+                    sciSend(SCI_REG, xTxFrame.length, xTxFrame.buffer);
+                }
+            }
+        }
         if ((uxBits & EVT_SCI_RX_READY) != 0U)
         {
-            do
+            // xRxLen = XBeeRxLen(xRxFrame.buffer[0]); // Get the length of the received frame
+            xStatus = XBeeParseFrame(&xRxFrame);
+
+            // do
+            // {
+            //     xRxLen = XBeeRxLen(sciReceiveByte(SCI_REG));
+            // } while (xRxLen == 0); // Wait until the length byte is received
+
+            if ((xStatus == XBEE_API_RX_SUCCESS) && (xRxFrame.length != 0))
             {
-                xRxLen = XBeeRxLen(sciReceiveByte(SCI_REG));
-            } while (xRxLen == 0); // Wait until the length byte is received
+                /* Receive the rest of the frame */
+                sciReceive(SCI_REG, xRxFrame.length, xRxFrame.buffer);
+                // xSetupRx = true; // Setup reception for the next frame
 
-            /* Receive the rest of the frame */
-            sciReceive(SCI_REG, xRxLen, xRxBuff);
+                /* Wait for the transfer to complete */
+                uxBits = xEventGroupWaitBits(
+                    pxSync->xSysEvents,
+                    EVT_SCI_RX_READY,
+                    pdTRUE,  // Clear bits after return
+                    pdFALSE, // Wait for any bit
+                    portMAX_DELAY);
 
-            /* Wait for the transfer to complete */
-            uxBits = xEventGroupWaitBits(
-                pxSync->xSysEvents,
-                EVT_SCI_RX_READY,
-                pdTRUE,  // Clear bits after return
-                pdFALSE, // Wait for any bit
-                portMAX_DELAY);
+                /* Parse the received data */
+                xStatus = XBeeParseFrame(&xRxFrame);
 
-            /* Parse the received data */
-            xStatus = XBeeParseFrame(xRxBuff, xRxLen, &xParsedFrame);
-
-            switch (xStatus)
-            {
-            case XBEE_API_RX_SUCCESS:
-                switch (xParsedFrame.type)
+                switch (xStatus)
                 {
-                case XBEE_API_TYPE_RX_PACKET:
-                    /* Only commands are received for now */
-                    xId = CMD_ID;
-                    if (msgpack_unpacker_init(&unp, MAX_PAYLOAD_SIZE))
+                case XBEE_API_RX_SUCCESS:
+                    switch (xRxFrame.type)
                     {
-                        /* Copy parsed frame data to unpacker */
-                        if (msgpack_unpacker_buffer_capacity(&unp) < xParsedFrame.rxPacket.rfDataLen)
-                            if (!msgpack_unpacker_reserve_buffer(&unp, xParsedFrame.rxPacket.rfDataLen))
-                                err = 1; // Handle buffer reservation error
+                    case XBEE_API_TYPE_RX_PACKET:
+                        /* Only commands are received for now */
+                        xId = CMD_ID;
 
-                        if (!err)
+                        /* Decode the received data using COBS, excluding the 0x00 delimiter */
+                        result = cobs_decode(xRxBuff, sizeof(xRxBuff),
+                                             xRxFrame.data.rxPacket.rxData, xRxFrame.data.rxPacket.rxDataLen - 1);
+
+                        if (result.status == COBS_DECODE_OK)
                         {
-                            memcpy(msgpack_unpacker_buffer(&unp), xParsedFrame.rxPacket.rfData,
-                                   xParsedFrame.rxPacket.rfDataLen);
-                            msgpack_unpacker_buffer_consumed(&unp, xParsedFrame.rxPacket.rfDataLen);
-                            ret = msgpack_unpacker_next(&unp, &msg);
-                            switch (ret)
+                            if (msgpack_unpacker_init(&unp, result.out_len))
                             {
-                            case MSGPACK_UNPACK_SUCCESS:
-                                obj = msg.data;
-                                result = cobs_decode(xRxBuff, sizeof(xRxBuff), obj.via.bin.ptr, obj.via.bin.size);
-                                if (result.status == COBS_DECODE_OK)
+                                if (msgpack_unpacker_buffer_capacity(&unp) < result.out_len)
+                                    if (!msgpack_unpacker_reserve_buffer(&unp, result.out_len))
+                                        err = 1; // Handle buffer reservation error
+
+                                if (!err)
                                 {
-                                    /* TODO: Send command to CMD task queue */
+                                    /* Copy parsed frame data to unpacker */
+                                    memcpy(msgpack_unpacker_buffer(&unp), xRxBuff, result.out_len);
+                                    msgpack_unpacker_buffer_consumed(&unp, result.out_len);
+                                    ret = msgpack_unpacker_next(&unp, &msg);
+                                    switch (ret)
+                                    {
+                                    case MSGPACK_UNPACK_SUCCESS:
+                                        obj = msg.data;
+                                        obj_bin = obj.via.bin;
+                                        /* TODO: Send command to CMD task queue */
+                                        break;
+                                    case MSGPACK_UNPACK_CONTINUE:
+                                        /* Check capacity, reserve buffer space, copy additional
+                                         * data to the buffer, notify consumed buffer size, then
+                                         * call msgpack_unpacker_next(&unp, &msg) again. */
+                                        break;
+                                    case MSGPACK_UNPACK_PARSE_ERROR:
+                                        /* Discard invalid data */
+                                        break;
+                                    }
                                 }
-                                else
-                                {
-                                    /* TODO: Handle COBS decoding error */
-                                }
-                                break;
-                            case MSGPACK_UNPACK_CONTINUE:
-                                /* Check capacity, reserve buffer space, copy additional
-                                 * data to the buffer, notify consumed buffer size, then
-                                 * call msgpack_unpacker_next(&unp, &msg) again. */
-                                break;
-                            case MSGPACK_UNPACK_PARSE_ERROR:
-                                /* Discard invalid data */
-                                break;
+                                err = 0;
+                                msgpack_unpacker_destroy(&unp);
+                            }
+                            else
+                            {
+                                /* TODO: Handle unpacker initialization error */
                             }
                         }
-                        err = 0;
-                        msgpack_unpacker_destroy(&unp);
+                        else
+                        {
+                            /* TODO: Handle COBS decoding error */
+                        }
+                        break;
+                    case XBEE_API_TYPE_TX_STATUS:
+                        if (xRxFrame.data.txStatus.deliveryStatus == XBEE_API_TX_STATUS_SUCCESS)
+                            xId = TELEMETRY_ACK_ID;
+                        else
+                            xId = TELEMETRY_NACK_ID;
+                    default:
+                        /* Discard unknown packet type */
+                        break;
                     }
-                    else
+
+                    /* Set data ready flag for the relevant task */
+                    switch (xId)
                     {
-                        /* TODO: Handle unpacker initialization error */
+                    case CMD_ID:              // Command identifier
+                        uxBits = EVT_SCI_CMD; // | EVT_SCI_TELEMETRY_READY;
+                        break;
+                    case TELEMETRY_ACK_ID:              // Telemetry ack identifier
+                        uxBits = EVT_SCI_TELEMETRY_ACK; // | EVT_SCI_CMD_READY;
+                        break;
+                    case TELEMETRY_NACK_ID:              // Telemetry nack identifier
+                        uxBits = EVT_SCI_TELEMETRY_NACK; // | EVT_SCI_CMD_READY
+                        break;
+                    default:
+                        break;
                     }
+
+                    xEventGroupSetBits(pxSync->xSysEvents, uxBits);
                     break;
-                case XBEE_API_TYPE_TX_STATUS:
-                    xId = TELEMETRY_ACK_ID;
+                // case XBEE_API_RX_ERROR_INVALID_CHECKSUM:
+                //     /* Handle checksum error */
+                //     break;
+                // case XBEE_API_RX_ERROR_INVALID_FRAME:
+                //     /* Handle frame error */
+                //     break;
                 default:
-                    /* Discard unknown packet type */
+                    /* Discard frame */
                     break;
                 }
 
-                /* Set data ready flag for the relevant task */
-                switch (xId)
-                {
-                case CMD_ID:              // Command identifier
-                    uxBits = EVT_SCI_CMD; // | EVT_TELEMETRY_READY;
-                    break;
-                case TELEMETRY_ACK_ID:              // Telemetry ack identifier
-                    uxBits = EVT_SCI_TELEMETRY_ACK; // | EVT_CMD_READY;
-                    break;
-                default:
-                    break;
-                }
-
-                xEventGroupSetBits(pxSync->xSysEvents, uxBits);
-                break;
-            // case XBEE_API_RX_ERROR_INVALID_CHECKSUM:
-            //     /* Handle checksum error */
-            //     break;
-            // case XBEE_API_RX_ERROR_INVALID_FRAME:
-            //     /* Handle frame error */
-            //     break;
-            default:
-                /* Discard frame */
-                break;
+                // xStatus = XBEE_API_RX_ERROR_NO_DATA; // Reset status
+                sciReceive(SCI_REG, 1, xRxFrame.buffer); // Setup reception for the next frame
             }
         }
 
         vTaskDelete(NULL);
     }
 }
-
-// static portTASK_FUNCTION(vRFDataTxTask, pvParameters)
-// {
-//     AppContext_t *pxCtx = (AppContext_t *)pvParameters;
-//     (void)pxCtx;
-
-//     __FOREVER__
-//     {
-//         /* Unlike Rx, Tx can be done inside tasks as long as proper synchronization
-//          * is maintained, such as using a mutex to block sciSend from being called
-//          * concurrently.
-//          */
-//     }
-// }
 
 static portTASK_FUNCTION(vCmdTask, pvParameters)
 {
@@ -1233,54 +1583,65 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
 {
     AppContext_t *pxCtx = (AppContext_t *)pvParameters;
     AppSync_t *pxSync = pxCtx->xSync;
-    AppData_t *pxData = pxCtx->xData;
+    AppCANData_t *pxCANData = pxCtx->xCANData;
+    AppSCIData_t *pxSCIData = &pxCtx->xSCIData;
     EventBits_t uxBits = 0U;
-    uint8_t xTxBuff[MAX_PAYLOAD_SIZE], xRxBuff[64], **pxFrame = NULL, *pxFrameID; // Buffers for telemetry data
-    size_t xTxLen = 0, xRxLen = 0;                                                // Length of data to send/receive
-    struct
-    {
-        DataTPS_t xTPS;
-        DataFront_t xFront;
-        DataCurrent_t xCurrent;
-        DataRear_t xRear;
-        DataMotor_t xMotor1;
-        DataMotor_t xMotor2;
-        DataDrv_t xDrv1;
-        DataDrv_t xDrv2;
-        /* ... */
-    } xLocalData;
+    // uint8_t uTxBuff[XBEE_API_MAX_FRAME_SZ], uRxBuff[64]; // Buffers for telemetry data
+    // uint8_t **puFrame = NULL, *puFrameID = NULL, *puFrameLen = NULL;
+    // size_t xTxLen = 0, xRxLen = 0; // Length of data to send/receive
+    // struct
+    // {
+    //     DataTPS_t xTPS;
+    //     DataFront_t xFront;
+    //     DataCurrent_t xCurrent;
+    //     DataRear_t xRear;
+    //     DataMainECU_t xMainECU;
+    //     DataMotor_t xMotor1;
+    //     DataMotor_t xMotor2;
+    //     DataDrv_t xDrv1;
+    //     DataDrv_t xDrv2;
+    //     /* ... */
+    // } xLocalData;
+    double xLocalData[7];
     XBeeAPIStatus_t xStatus;
+    XBeeAPIFrame_t xFrame;
+    // uint8_t *uBuffPtr = &xFrame.buffer[XBEE_API_FRAME_HEAD_SZ + XBEE_API_DATA_HEAD_SZ_TX_REQUEST];          // Pointer to the payload position
+    // uint8_t uBuffLen = sizeof(xFrame.buffer) - (XBEE_API_FRAME_HEAD_SZ + XBEE_API_DATA_HEAD_SZ_TX_REQUEST); // Length of the payload buffer
+    uint8_t uPayloadPos = XBEE_API_FRAME_HEAD_SZ + XBEE_API_DATA_HEAD_SZ_TX_REQUEST; // Position of the payload in the frame buffer
     msgpack_sbuffer sbuf;
     msgpack_packer pk;
     cobs_encode_result result;
+    char keyBuff[] = "s_00"; // Buffer for msgpack keys
+    uint16_t usTxBufferIdx = 0, usRxBufferIdx = 0;
 
     __FOREVER__
     {
         /* Wait for 50Hz periodic event or telemetry ack/nack */
         uxBits = xEventGroupWaitBits(
             pxSync->xSysEvents,
-            EVT_PERIODIC_TELEMETRY | EVT_SCI_TELEMETRY_ACK | EVT_TELEMETRY_NACK,
+            EVT_RTI_PERIODIC_TELEMETRY | EVT_SCI_TELEMETRY_ACK | EVT_SCI_TELEMETRY_NACK,
             pdFALSE, // Clear bits after return
             pdFALSE, // Wait for any bit
             portMAX_DELAY);
 
-        if (((uxBits & EVT_PERIODIC_TELEMETRY) != 0U) || ((uxBits & EVT_TELEMETRY_NACK) != 0U))
+        // /* Prepare for a new transmission regardless of the state of the previous one */
+        // xTimerStop(pxSync->xTxTimeoutTimer, portMAX_DELAY);
+
+        if ((uxBits & EVT_RTI_PERIODIC_TELEMETRY) != 0U)
         {
-            if (((uxBits & EVT_PERIODIC_TELEMETRY) != 0U) &&
-                xSemaphoreTake(pxSync->xDataMutex, portMAX_DELAY) == pdTRUE)
+            if (xSemaphoreTake(pxSync->xCANDataMutex, portMAX_DELAY) == pdTRUE)
             {
                 /* Local copy of telemetry data */
-                xLocalData.xTPS = pxData->xTPS;
-                xLocalData.xFront = pxData->xFront;
-                xLocalData.xCurrent = pxData->xCurrent;
-                xLocalData.xRear = pxData->xRear;
-                xLocalData.xMotor1 = pxData->xMotor1;
-                xLocalData.xMotor2 = pxData->xMotor2;
-                xLocalData.xDrv1 = pxData->xDrv1;
-                xLocalData.xDrv2 = pxData->xDrv2;
+                xLocalData[0] = (double)pxCANData->xTPS.xTPS1;
+                xLocalData[1] = (double)pxCANData->xTPS.xTPS2;
+                xLocalData[2] = (double)pxCANData->xFront.xFLSpeed;
+                xLocalData[3] = (double)pxCANData->xFront.xFRSpeed;
+                xLocalData[4] = (double)pxCANData->xFront.xDirAngle;
+                xLocalData[5] = (double)pxCANData->xFront.xFBrake;
+                xLocalData[6] = (double)pxCANData->xRear.xRBrake;
                 /* ... */
 
-                xSemaphoreGive(pxSync->xDataMutex);
+                xSemaphoreGive(pxSync->xCANDataMutex);
             }
 
             /* Initialize msgpack buffer and packer */
@@ -1288,32 +1649,65 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
             msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
 
             /* Pack telemetry data into msgpack format */
-            // msgpack_pack_bin_with_body(&pk, (const char *)&xLocalData, sizeof(xLocalData));
-            msgpack_pack_array(&pk, 7);
-            msgpack_pack_uint16(&pk, xLocalData.xTPS.values.xTPS1);
-            msgpack_pack_uint16(&pk, xLocalData.xTPS.values.xTPS2);
-            msgpack_pack_uint16(&pk, xLocalData.xFront.values.xFLSpeed);
-            msgpack_pack_uint16(&pk, xLocalData.xFront.values.xFRSpeed);
-            msgpack_pack_uint16(&pk, xLocalData.xFront.values.xDirAngle);
-            msgpack_pack_uint16(&pk, xLocalData.xFront.values.xFBrake);
-            /* ... */
+            if (msgpack_pack_map(&pk, 7) == 0)
+            {
+                for (char i = 0; i < 7; ++i)
+                {
+                    keyBuff[2] = '0' + i; // Update key index
+                    msgpack_pack_str_with_body(&pk, keyBuff, 4);
+                    msgpack_pack_double(&pk, xLocalData[i]);
+                    /* TODO: Handle msgpack packing error */
+                }
+                keyBuff[2] = '0'; // Reset key index
+            }
+            else
+            {
+                /* TODO: Handle msgpack packing error */
+            }
 
-            result = cobs_encode(xTxBuff, sizeof(xTxBuff), sbuf.data, sbuf.size);
-            msgpack_sbuffer_destroy(&sbuf);
+            /* Encode the msgpack data using COBS */
+            result = cobs_encode(&xFrame.buffer[uPayloadPos], sizeof(xFrame.buffer) - (uPayloadPos + 1), // Leave space for delimiter
+                                 sbuf.data, sbuf.size);
+
             if (result.status == COBS_ENCODE_OK)
             {
+                xFrame.buffer[result.out_len] = 0x00; // Append delimiter byte
+
                 /* Build XBee transmission request API frame */
-                xStatus = XBeeBuildTxRequest((uint8_t *)&dest64, (uint8_t *)&dest16, xTxBuff, result.out_len,
-                                             pxFrame, pxFrameID);
-                /* TODO: Modify the XBee module to return len by reference */
+                xFrame.type = XBEE_API_TYPE_TX_REQUEST;
+                xFrame.data.txRequest.frameID = 0x00; // No response required
+                xFrame.data.txRequest.dest64 = dest64;
+                xFrame.data.txRequest.dest16 = dest16;
+                xFrame.data.txRequest.broadcastRadius = 0x00; // Maximum hops
+                xFrame.data.txRequest.txOptions = 0x00;       // Disable ACK and retries
+                xFrame.data.txRequest.payloadData = &xFrame.buffer[uPayloadPos];
+                xFrame.data.txRequest.payloadDataLen = result.out_len + 1;
+                xStatus = XBeeAPIBuildFrame(&xFrame);
 
                 if (xStatus == XBEE_API_TX_SUCCESS)
                 {
-                    /* Send telemetry data to XBee via UART */
-                    sciSend(SCI_REG, xTxLen, xTxBuff);
+                    /* TODO: Use ping-pong buffering and/or synchronization */
+                    if (semaphoreTake(pxSync->xSCIDataMutex, portMAX_DELAY) == pdTRUE)
+                    {
+                        // memccpy(pxSCIData->xTxBuff, *pxFrame, 0x00, *pxFrameLen);
+                        memcpy(pxSCIData->xTxFrame, &xFrame, xFrame.length);
+                        // pxSCIData->xTxLen = *pxFrameLen;
 
-                    /* Set a timer to handle retransmission */
-                    xTimerStart(pxSync->xTxTimeoutTimer, 0);
+                        xSemaphoreGive(pxSync->xSCIDataMutex);
+
+                        /* Send telemetry data */
+                        xEventGroupSetBits(pxSync->xSysEvents, EVT_SCI_TELEMETRY_READY);
+
+                        // /* Set a timer to handle retransmission */
+                        // xTimerStart(pxSync->xTxTimeoutTimer, portMAX_DELAY);
+
+                        // uxBits = xEventGroupWaitBits(
+                        //     pxSync->xSysEvents,
+                        //     EVT_SCI_TELEMETRY_ACK | EVT_SCI_TELEMETRY_NACK,
+                        //     pdTRUE,  // Clear bits after return
+                        //     pdFALSE, // Wait for any bit
+                        //     pdMS_TO_TICKS(10)); // Wait for 10 ms for ACK/NACK
+                    }
                 }
                 else if (xStatus == XBEE_API_TX_ERROR_FRAME_TOO_LARGE)
                 {
@@ -1325,11 +1719,19 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
             {
                 /* TODO: Handle encoding error */
             }
+
+            msgpack_sbuffer_destroy(&sbuf);
         }
         else if ((uxBits & EVT_SCI_TELEMETRY_ACK) != 0U)
         {
-            /* Telemetry acknowledged, can send next packet */
-            xTimerStop(pxSync->xTxTimeoutTimer, 0);
+            /* TODO: Clear pending Tx using frameID */
+        }
+        else if ((uxBits & EVT_SCI_TELEMETRY_NACK) != 0U)
+        {
+            /* If previous transmission failed, retry with the same data */
+            xEventGroupSetBits(pxSync->xSysEvents, EVT_SCI_TELEMETRY_READY);
+
+            /* TODO: Retransmit with frameID, and remove if max retries exceeded */
         }
     }
 
@@ -1359,12 +1761,12 @@ static portTASK_FUNCTION(vTelemetryTask, pvParameters)
 //      */
 // }
 
-static void vTxTimeoutCallback(TimerHandle_t xTimer)
-{
-    configASSERT(xTimer != NULL);
+// static void vTxTimeoutCallback(TimerHandle_t xTimer)
+// {
+//     configASSERT(xTimer != NULL);
 
-    xEventGroupSetBits(xAppContext.xSync->xSysEvents, EVT_TELEMETRY_NACK);
-}
+//     xEventGroupSetBits(xAppContext.xSync->xSysEvents, EVT_SCI_TELEMETRY_NACK);
+// }
 
 static void vAPPSRuleBreakTimerCallback(TimerHandle_t xTimer)
 {

@@ -10,3 +10,5 @@ Debug/
 .clangd
 .cproject
 .project
+
+utils/

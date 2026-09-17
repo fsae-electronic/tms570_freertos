@@ -3,16 +3,7 @@
 
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
-    void vTestAppInit(void);
-    void vTestAppPeriodic(void);
-
-#ifdef __cplusplus
-}
-#endif
+void vTestAppInit(void);
+void vTestAppPeriodic(void);
 
 #endif /* _TEST_APP_H_ */
