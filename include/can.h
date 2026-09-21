@@ -630,9 +630,9 @@ typedef struct can_config_reg
 
 
 /* Configuration registers initial value for CAN1*/
-#define CAN1_CTL_CONFIGVALUE      ((uint32)0x00000000U \
+#define CAN1_CTL_CONFIGVALUE      ((uint32)0x00000200U \
                                  | (uint32)0x00000000U \
-                                 | (uint32)((uint32)0x00000005U  << 10U) | 0x00020002U)
+                                 | (uint32)((uint32)0x0000000AU  << 10U) | 0x00020002U)
 #define CAN1_ES_CONFIGVALUE         0x00000007U 
 #define CAN1_BTR_CONFIGVALUE      ((uint32)((uint32)0U << 16U) \
                                  | (uint32)((uint32)(1U - 1U) << 12U) \

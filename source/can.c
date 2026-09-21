@@ -104,9 +104,9 @@ void canInit(void)
     *     - Disable status interrupts
     *     - Enter initialization mode
     */
-    canREG1->CTL = (uint32)0x00000000U 
+    canREG1->CTL = (uint32)0x00000200U 
                  | (uint32)0x00000000U 
-                 | (uint32)((uint32)0x00000005U  << 10U)
+                 | (uint32)((uint32)0x0000000AU  << 10U)
                  | (uint32)0x00020043U;
 
     /** - Clear all pending error flags and reset current status */

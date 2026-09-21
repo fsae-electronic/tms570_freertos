@@ -1,8 +1,10 @@
+#include <stddef.h>
+
 #include "data.h"
 
 void dataPack(uint8_t *raw, void *values, DataID_t id)
 {
-    if (raw != NULL && values != NULL)
+    if ((raw != NULL) && (values != NULL))
     {
         switch (id)
         {
@@ -29,7 +31,7 @@ void dataPack(uint8_t *raw, void *values, DataID_t id)
 
 void dataUnpack(uint8_t *raw, void *values, DataID_t id)
 {
-    if (raw != NULL && values != NULL)
+    if ((raw != NULL) && (values != NULL))
     {
         switch (id)
         {
