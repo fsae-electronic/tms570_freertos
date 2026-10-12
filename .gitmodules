@@ -8,9 +8,9 @@
 	path = msgpack/msgpack-c
 	url = https://github.com/msgpack/msgpack-c.git
 	branch = c_master
-[submodule "msgpack/cmp"]
-	path = msgpack/cmp
-	url = https://github.com/camgunz/cmp.git
+[submodule "msgpack/cwpack"]
+	path = msgpack/cwpack
+	url = https://github.com/clwi/CWPack
 [submodule "xbee/digi_xbee_api"]
 	path = xbee/digi_xbee_api
 	url = https://github.com/fsae-electronic/digi_xbee_api.git

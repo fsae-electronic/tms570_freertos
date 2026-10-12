@@ -6,7 +6,7 @@
 #include "data.h"
 #include "test_App.h"
 
-#include "msgpack/msgpack.h"
+#include "msgpack/cwpack.h"
 
 // Simulated values
 static float tps_1 = 0;
@@ -51,67 +51,34 @@ static uint32_t sim_counter = 0;
 //     0x48U
 // };
 
-void pack_example()
+static int iMsgPackTest(void)
 {
-    /* Initialize a simple buffer to hold the serialized data */
-    msgpack_sbuffer sbuf;
-    msgpack_sbuffer_init(&sbuf);
+    uint8_t uTxBuff[256]; // Buffer for msgpack data
+    const char *str = "Hello";
+    cw_pack_context pc;
+    cw_unpack_context uc;
 
-    /* Initialize the packer with the buffer write callback */
-    msgpack_packer pk;
-    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+    /* Initialize the packer with the buffer */
+    cw_pack_context_init(&pc, uTxBuff, sizeof(uTxBuff), NULL);
 
     /* Serialize a structured payload (array containing [42, true, "Hello"]) */
-    int retval = msgpack_pack_array(&pk, 3); // Tell the packer an array of 3 elements follows
+    cw_pack_array_size(&pc, 3); // Tell the packer an array of 3 elements follows
+    cw_pack_signed(&pc, 42);
+    cw_pack_true(&pc);
+    cw_pack_str(&pc, str, strlen(str) - 1); // Exclude null terminator
 
-    retval = msgpack_pack_int(&pk, 42); // Pack first element
-    retval = msgpack_pack_true(&pk);    // Pack second element
+    if (pc.return_code != CWP_RC_OK)
+        return pc.return_code;
 
-    // For strings, pack the header size first, then the actual payload body
-    const char *str = "Hello";
-    size_t str_len = strlen(str);
-    retval = msgpack_pack_str(&pk, str_len);
-    retval = msgpack_pack_str_body(&pk, str, str_len);
+    cw_unpack_context_init(&uc, uTxBuff, sizeof(uTxBuff), NULL);
 
-    /* At this stage, sbuf.data contains the binary MessagePack payload */
+    cw_unpack_next(&uc);
+    cw_unpack_next(&uc);
+    cw_unpack_next(&uc);
+    cw_unpack_next(&uc);
+    cw_unpack_next(&uc); // Should return CWP_RC_END_OF_INPUT
 
-    /* Clean up buffer allocations when done */
-    msgpack_sbuffer_destroy(&sbuf);
-}
-
-static void vMsgPackTest(void)
-{
-    msgpack_sbuffer sbuf;
-    msgpack_packer pk;
-    msgpack_unpacked result;
-    size_t offset = 0U;
-    int retval = 0;
-    const char sample_text[] = "ok";
-    const size_t sample_text_len = sizeof(sample_text) - 1U;
-
-    msgpack_sbuffer_init(&sbuf);
-    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
-    msgpack_unpacked_init(&result);
-
-    retval = msgpack_pack_array(&pk, 3U);
-    retval = msgpack_pack_uint32(&pk, 42U);
-    retval = msgpack_pack_true(&pk);
-    retval = msgpack_pack_str(&pk, sample_text_len);
-    retval = msgpack_pack_str_body(&pk, sample_text, sample_text_len);
-    retval = msgpack_unpack_next(&result, sbuf.data, sbuf.size, &offset) == MSGPACK_UNPACK_SUCCESS;
-    retval = offset == sbuf.size;
-    retval = result.data.type == MSGPACK_OBJECT_ARRAY;
-    retval = result.data.via.array.size == 3U;
-    retval = result.data.via.array.ptr[0].type == MSGPACK_OBJECT_POSITIVE_INTEGER;
-    retval = result.data.via.array.ptr[0].via.u64 == 42U;
-    retval = result.data.via.array.ptr[1].type == MSGPACK_OBJECT_BOOLEAN;
-    retval = result.data.via.array.ptr[1].via.boolean == true;
-    retval = result.data.via.array.ptr[2].type == MSGPACK_OBJECT_STR;
-    retval = result.data.via.array.ptr[2].via.str.size == sample_text_len;
-    retval = memcmp(result.data.via.array.ptr[2].via.str.ptr, sample_text, sample_text_len) == 0;
-
-    msgpack_unpacked_destroy(&result);
-    msgpack_sbuffer_destroy(&sbuf);
+    return uc.return_code;
 }
 
 void vTestAppInit(void)
@@ -120,9 +87,7 @@ void vTestAppInit(void)
     canEnableloopback(canREG1, Internal_Lbk);
     // sciEnableLoopback(sciREG, Digital_Lbk);
 
-    /* Small msgpack test for the official library */
-    // pack_example();
-    // vMsgPackTest();
+    // iMsgPackTest();
 }
 
 void vTestAppPeriodic(void)
@@ -266,9 +231,10 @@ void vTestAppPeriodic(void)
 
     /* Receive CAN messages from Main ECU */
 
-    // if (canIsRxMessageArrived(canREG1, canMESSAGE_BOX5) == 1)
+    // if (canIsRxMessageArrived(canREG1, canMESSAGE_BOX5))
     // {
-    //     canGetData(canREG1, canMESSAGE_BOX5, main_ecu_msg.raw);
+    //     canGetData(canREG1, canMESSAGE_BOX5, raw);
+    //     dataUnpack(raw, &main_ecu_msg, DATA_ID_MAIN_ECU);
 
     //     /* Process Main ECU message */
     // }

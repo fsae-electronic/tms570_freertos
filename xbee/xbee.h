@@ -18,7 +18,7 @@
 
 // Defines /////////////////////////////////////////////////////////////////////////////
 
-#define XBEE_API_FRAME_HEAD_SZ (3U) // StartDelimiter | Length MSB | Length LSB
+#define XBEE_API_FRAME_HEAD_SZ (4U) // StartDelimiter | Length MSB | Length LSB | FrameType
 
 #define XBEE_API_DATA_HEAD_SZ_AT_COMMAND (3U)  // FrameID | 16-bit ATCmd
 #define XBEE_API_DATA_HEAD_SZ_TX_REQUEST (15U) // FrameID | 64-bit Dest | 16-bit Dest | BroadcastRadius | TxOptions
@@ -69,71 +69,72 @@ typedef enum
     XBEE_API_RX_ERROR_INVALID_CHECKSUM,
     XBEE_API_RX_ERROR_INVALID_FRAME,
     XBEE_API_TX_SUCCESS,
-    XBEE_API_TX_ERROR_FRAME_TOO_LARGE
+    XBEE_API_TX_ERROR_FRAME_TOO_LARGE,
+    XBEE_API_TX_ERROR_INVALID_FRAME
 } XBeeAPIStatus_t;
 
 typedef enum
 {
     /* Special commands */
-    XBEE_API_AT_CMD_AC, // Apply Changes
-    XBEE_API_AT_CMD_FR, // Software Reset
-    XBEE_API_AT_CMD_WR, // Write
+    XBEE_API_AT_CMD_AC = 0x4143, // Apply Changes
+    XBEE_API_AT_CMD_FR = 0x4652, // Software Reset
+    XBEE_API_AT_CMD_WR = 0x5752, // Write
 
     /* MAC/PHY commands */
-    XBEE_API_AT_CMD_HP, // Preamble ID
-    XBEE_API_AT_CMD_IP, // Network ID
-    XBEE_API_AT_CMD_MT, // Broadcast Multi-Transmits
-    XBEE_API_AT_CMD_BR, // RF Data Rate
-    XBEE_API_AT_CMD_PL, // TX Power Level
-    XBEE_API_AT_CMD_RR, // Unicast Mac Retries
+    XBEE_API_AT_CMD_HP = 0x4850, // Preamble ID
+    XBEE_API_AT_CMD_IP = 0x4950, // Network ID
+    XBEE_API_AT_CMD_MT = 0x4D54, // Broadcast Multi-Transmits
+    XBEE_API_AT_CMD_BR = 0x4252, // RF Data Rate
+    XBEE_API_AT_CMD_PL = 0x504C, // TX Power Level
+    XBEE_API_AT_CMD_RR = 0x5252, // Unicast Mac Retries
 
     /* Diagnostic commands - MAC statistics and timeouts */
-    XBEE_API_AT_CMD_BC, // Bytes Transmitted
-    XBEE_API_AT_CMD_DB, // Last Packet RSSI
+    XBEE_API_AT_CMD_BC = 0x4243, // Bytes Transmitted
+    XBEE_API_AT_CMD_DB = 0x4442, // Last Packet RSSI
 
     /* Network commands */
-    XBEE_API_AT_CMD_CE, // Routing / Messaging Mode
+    XBEE_API_AT_CMD_CE = 0x4345, // Routing / Messaging Mode
 
     /* Addressing commands */
-    XBEE_API_AT_CMD_SH, // Serial Number High
-    XBEE_API_AT_CMD_SL, // Serial Number Low
-    XBEE_API_AT_CMD_DH, // Destination Address High
-    XBEE_API_AT_CMD_DL, // Destination Address Low
-    XBEE_API_AT_CMD_TO, // Transmit Options
-    XBEE_API_AT_CMD_NI, // Node Identifier
-    XBEE_API_AT_CMD_NT, // Network Discovery Back-off
-    XBEE_API_AT_CMD_NO, // Network Discovery Options
-    XBEE_API_AT_CMD_CI, // Cluster ID
+    XBEE_API_AT_CMD_SH = 0x5348, // Serial Number High
+    XBEE_API_AT_CMD_SL = 0x534C, // Serial Number Low
+    XBEE_API_AT_CMD_DH = 0x4448, // Destination Address High
+    XBEE_API_AT_CMD_DL = 0x444C, // Destination Address Low
+    XBEE_API_AT_CMD_TO = 0x544F, // Transmit Options
+    XBEE_API_AT_CMD_NI = 0x4E49, // Node Identifier
+    XBEE_API_AT_CMD_NT = 0x4E54, // Network Discovery Back-off
+    XBEE_API_AT_CMD_NO = 0x4E4F, // Network Discovery Options
+    XBEE_API_AT_CMD_CI = 0x4349, // Cluster ID
 
     /* Addressing discovery/configuration commands */
-    XBEE_API_AT_CMD_DN, // Discover Node
-    XBEE_API_AT_CMD_ND, // Network Discover
-    XBEE_API_AT_CMD_FN, // Find Neighbors
+    XBEE_API_AT_CMD_DN = 0x444E, // Discover Node
+    XBEE_API_AT_CMD_ND = 0x4E44, // Network Discover
+    XBEE_API_AT_CMD_FN = 0x464E, // Find Neighbors
 
     /* Security commands */
-    XBEE_API_AT_CMD_EE, // Encryption Enable
-    XBEE_API_AT_CMD_KY, // AES Encryption Key
+    XBEE_API_AT_CMD_EE = 0x4545, // Encryption Enable
+    XBEE_API_AT_CMD_KY = 0x4B59, // AES Encryption Key
 
     /* Serial interfacing commands */
-    XBEE_API_AT_CMD_BD, // Interface Data Rate
-    XBEE_API_AT_CMD_NB, // Parity
-    XBEE_API_AT_CMD_SB, // Stop Bits
-    XBEE_API_AT_CMD_AP, // API Enable
-    XBEE_API_AT_CMD_AO, // API Options
+    XBEE_API_AT_CMD_BD = 0x4244, // Interface Data Rate
+    XBEE_API_AT_CMD_NB = 0x4E42, // Parity
+    XBEE_API_AT_CMD_SB = 0x5342, // Stop Bits
+    XBEE_API_AT_CMD_AP = 0x4150, // API Enable
+    XBEE_API_AT_CMD_AO = 0x414F, // API Options
 
     /* Sleep commands */
-    XBEE_API_AT_CMD_SM, // Sleep Mode
-    XBEE_API_AT_CMD_SO, // Sleep Options
+    XBEE_API_AT_CMD_SM = 0x534D, // Sleep Mode
+    XBEE_API_AT_CMD_SO = 0x534F, // Sleep Options
 
     /* Command mode options */
-    XBEE_API_AT_CMD_CC, // Command Sequence Character
-    XBEE_API_AT_CMD_CT, // Command Mode Timeout
-    XBEE_API_AT_CMD_CN, // Exit Command Mode
+    XBEE_API_AT_CMD_CC = 0x4343, // Command Sequence Character
+    XBEE_API_AT_CMD_CT = 0x4354, // Command Mode Timeout
+    XBEE_API_AT_CMD_CN = 0x434E, // Exit Command Mode
 
     /* Firmware version/information commands */
-    XBEE_API_AT_CMD_NP, // Maximum Packet Payload Bytes
+    XBEE_API_AT_CMD_NP = 0x4E50, // Maximum Packet Payload Bytes
 
-    XBEE_API_AT_CMD_UNKNOWN // Unknown command
+    XBEE_API_AT_CMD_UNKNOWN = 0xFFFF // Unknown command
 } XBeeAPIATCommand_t;
 
 typedef enum
@@ -207,7 +208,7 @@ typedef struct
 typedef struct
 {
     uint8_t frameID;
-    uint16_t ATCmd;
+    XBeeAPIATCommand_t ATCmd;
     XBeeAPICommandStatus_t cmdStatus;
     uint8_t *cmdData; // Optional command bytes
     uint8_t cmdDataLen;
