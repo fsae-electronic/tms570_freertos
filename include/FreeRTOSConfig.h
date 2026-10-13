@@ -108,6 +108,7 @@
 #define configUSE_MALLOC_FAILED_HOOK  0
 
 /* USER CODE BEGIN (1) */
+#define configUSE_DAEMON_TASK_STARTUP_HOOK 1
 /* USER CODE END */
 
 #define configSUPPORT_STATIC_ALLOCATION			0

@@ -70,7 +70,7 @@ static int iMsgPackTest(void)
     if (pc.return_code != CWP_RC_OK)
         return pc.return_code;
 
-    cw_unpack_context_init(&uc, uTxBuff, sizeof(uTxBuff), NULL);
+    cw_unpack_context_init(&uc, pc.start, pc.current - pc.start, NULL);
 
     cw_unpack_next(&uc);
     cw_unpack_next(&uc);

@@ -8,6 +8,10 @@
  * Headers                                                                            *
  * ---------------------------------------------------------------------------------- */
 
+#if !defined(__TI_COMPILER_VERSION__) && !defined(__GNUC__) && !defined(__clang__)
+#include <stdalign.h>
+#endif
+
 /* TMS570 supports MPU, so the app will call MPU_ wrappers transparently (because
  * os_mpu_wrappers.h does the remapping). MPU_WRAPPERS_INCLUDED_FROM_API_FILE should not
  * be used here because defining it prevents os_task.h from redefining all the API
@@ -47,12 +51,30 @@
 #define ENABLE_APP_TEST
 #endif
 
+#if defined(__TI_COMPILER_VERSION__) && !defined(__clang__)
+/* Classic TI compiler (armcl) */
+#define ALIGN_TO(symbol, bytes) _Pragma(TI_STR(DATA_ALIGN(symbol, bytes)))
+#define TI_STR(x) TI_STR_EXPAND(x)
+#define TI_STR_EXPAND(x) #x
+#define _ALIGN_ATTRIBUTE(bytes)
+#define ALIGN_ATTRIBUTE_(bytes)
+#elif defined(__GNUC__) || defined(__clang__)
+/* GCC and TI armclang (based on LLVM/Clang) */
+#define ALIGN_TO(symbol, bytes)
+#define _ALIGN_ATTRIBUTE(bytes) __attribute__((aligned(bytes)))
+#define ALIGN_ATTRIBUTE_(bytes)
+#else
+/* Default fallback to C11 / C23 standard if the compiler is modern */
+#define ALIGN_TO(symbol, bytes)
+#define _ALIGN_ATTRIBUTE(bytes)
+#define ALIGN_ATTRIBUTE_(bytes) alignas(bytes)
+#endif
+
 #define PRIO_MAX (configMAX_PRIORITIES - 1U)
 #define TASK_STACK_WORDS(sz_bytes) ((sz_bytes) / sizeof(StackType_t))
 #define __FOREVER__ for (;;)
 
 /* Task priorities */
-#define PRIO_INIT PRIO_MAX    // Must perform setup
 #define PRIO_CAN_TX (6U)      // Main ECU updates and calibration
 #define PRIO_CAN_RX (6U)      // 60Hz data update from CAN
 #define PRIO_RULES (5U)       // Compliance checking before actuation
@@ -62,7 +84,8 @@
 #define PRIO_SCI_TX (2U)      // 50Hz telemetry
 
 /* Task stack sizes */
-#define STACK_INIT TASK_STACK_WORDS(configMINIMAL_STACK_SIZE)
+#define STACK_IDLE configMINIMAL_STACK_SIZE
+#define STACK_TIMER configTIMER_TASK_STACK_DEPTH
 #define STACK_CAN_TX TASK_STACK_WORDS(512)
 #define STACK_CAN_RX TASK_STACK_WORDS(512)
 #define STACK_RULES TASK_STACK_WORDS(512)
@@ -70,6 +93,9 @@
 #define STACK_DRIVERS_FSM TASK_STACK_WORDS(1024)
 #define STACK_CMD TASK_STACK_WORDS(512)
 #define STACK_SCI_TX TASK_STACK_WORDS(1024)
+
+#define STACK_IDLE_SZ (STACK_IDLE * sizeof(StackType_t))
+#define STACK_TIMER_SZ (STACK_TIMER * sizeof(StackType_t))
 
 // SCI event flags /////////////////////////////////////////////////////////////////////
 
@@ -160,7 +186,7 @@
 
 /* Peripheral registers */
 #define CAN_REG canREG1
-#define SCI_REG sciREG
+#define SCI_REG scilinREG
 
 /* RTI is blocked by default (this FreeRTOS port uses RTI Counter 0 Compare 0 to
  * generate the system tick). In order to use it, rti.c has to be manually added to the
@@ -214,7 +240,6 @@ typedef enum
 /* Application tasks */
 typedef struct
 {
-    TaskHandle_t xInitTask;
     TaskHandle_t xCANTxTask;
     TaskHandle_t xCANRxTask;
     TaskHandle_t xRulesTask;
@@ -232,10 +257,12 @@ typedef struct
      */
     EventGroupHandle_t xSysEvents; // Event flags for system events
     EventGroupHandle_t xCANEvents; // Event flags for CAN data updates
+
     /* Tasks need mutex locked data for consistency, so local copies are used to avoid
      * blocking data updates and maintain protected access as short as possible.
      */
-    SemaphoreHandle_t xCANDataMutex;   // Mutex for CAN data
+    SemaphoreHandle_t xCANDataMutex; // Mutex for CAN data
+
     TimerHandle_t xAPPSRuleBreakTimer; // Timer to track APPS rule breaks
     TimerHandle_t xBSERuleBreakTimer;  // Timer to track BSE rule breaks
 #ifdef ENABLE_APP_TEST
@@ -246,8 +273,7 @@ typedef struct
 /* Application resources (static allocation buffers) */
 typedef struct
 {
-    /* Task TCBs and stacks */
-    StaticTask_t xInitTaskBuffer;
+    /* Task TCBs */
     StaticTask_t xCANTxTaskBuffer;
     StaticTask_t xCANRxTaskBuffer;
     StaticTask_t xRulesTaskBuffer;
@@ -255,12 +281,12 @@ typedef struct
     StaticTask_t xDriversFSMTaskBuffer;
     StaticTask_t xCmdTaskBuffer;
     StaticTask_t xSCITxTaskBuffer;
+
     /* Proper alignment for the TMS570 MPU should be ensured by defining aligned stack
      * types or using compiler attributes. It typically requires regions to be aligned
      * to their size, so stacks and local data arrays should be aligned to their total
      * byte size.
      */
-    StackType_t xInitStack[STACK_INIT];
     StackType_t xCANTxStack[STACK_CAN_TX];
     StackType_t xCANRxStack[STACK_CAN_RX];
     StackType_t xRulesStack[STACK_RULES];
@@ -340,6 +366,11 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
                                     StackType_t **ppxTimerTaskStackBuffer,
                                     uint32_t *pulTimerTaskStackSize);
 
+/**
+ * @brief Called after the scheduler starts and the timer service task executes
+ */
+void vApplicationDaemonTaskStartupHook(void);
+
 /* ---------------------------------------------------------------------------------- *
  * Prototypes for private functions with file level scope                             *
  * ---------------------------------------------------------------------------------- */
@@ -375,7 +406,6 @@ static void vAppCreateObjects(AppContext_t *pxCtx);
 /**
  * @brief Main tasks
  * @param pvParameters Pointer to task parameters used to pass the app context
- * - Initialization: performs setup that requires interrupts, then deletes itself
  * - CAN Tx: transmits Main ECU data and calibrations over CAN
  * - CAN Rx: receives sensors and drivers data over CAN
  * - Rules: checks compliance with rules and sets alarms/events
@@ -384,7 +414,6 @@ static void vAppCreateObjects(AppContext_t *pxCtx);
  * - Command: processes and validates received commands
  * - SCI Tx: collects vehicle telemetry, packs it and transmits it over RF
  */
-static portTASK_FUNCTION_PROTO(vInitTask, pvParameters);
 static portTASK_FUNCTION_PROTO(vCANTxTask, pvParameters);
 static portTASK_FUNCTION_PROTO(vCANRxTask, pvParameters);
 static portTASK_FUNCTION_PROTO(vRulesTask, pvParameters);
@@ -425,6 +454,13 @@ static AppContext_t xAppContext = {APP_RB_NONE,
 static const uint64_t dest64 = 0x0013A20040B2B3D4; // Example 64-bit destination address
 static const uint16_t dest16 = 0xFFFE;             // Example 16-bit destination address
 
+ALIGN_TO(uxIdleTaskStack, STACK_IDLE_SZ)
+ALIGN_ATTRIBUTE_(STACK_IDLE_SZ)
+static StackType_t uxIdleTaskStack[STACK_IDLE] _ALIGN_ATTRIBUTE(STACK_IDLE_SZ);
+ALIGN_TO(uxTimerTaskStack, STACK_TIMER_SZ)
+ALIGN_ATTRIBUTE_(STACK_TIMER_SZ)
+static StackType_t uxTimerTaskStack[STACK_TIMER] _ALIGN_ATTRIBUTE(STACK_TIMER_SZ);
+
 /* ---------------------------------------------------------------------------------- *
  * Global function definitions                                                        *
  * ---------------------------------------------------------------------------------- */
@@ -446,10 +482,8 @@ void vAppInit(void)
     // portENABLE_INTERRUPTS();
     // vAppInitModulesWithInterrupts();
     // portDISABLE_INTERRUPTS();
-    /* To initialize peripherals that require interrupts, a dedicated init task can be
-     * used that performs the necessary setup and then deletes itself (see vInitTask).
-     * Another option is a timer callback that runs once after scheduler start
-     * (see vInitTimerCallback).
+    /* To initialize peripherals that require interrupts, the daemon task startup hook
+     * is used to perform the necessary setup.
      */
 
     xAppContext.xState = APP_STATE_RUNNING;
@@ -466,7 +500,7 @@ void vAppRun(void)
 // Notifications ///////////////////////////////////////////////////////////////////////
 
 /* _FromISR APIs (interrupt safe) and the xHigherPriorityTaskWoken parameter should be
- * to update RTOS objects and request a context switch.
+ * used to update RTOS objects and request a context switch.
  */
 
 void canErrorNotification(canBASE_t *node, uint32 notification)
@@ -699,10 +733,12 @@ void sciNotification(sciBASE_t *sci, uint32 flags)
 
 /* When the static memory allocator is enabled (configSUPPORT_STATIC_ALLOCATION = 1),
  * the idle task and the timer task (configUSE_TIMERS = 1) will use static memory
- * supplied by user functions. The kernel will call vApplicationGet_TaskMemory() to
- * allow the application to create and return memory buffers for the TCB and stack. The
- * idle task is run when a core runs out of scheduled work. It performs some
- * housekeeping and can also trigger the user's vTaskIdleHook() if it is enabled.
+ * supplied by user functions. These callbacks must always be manually provided on MPU
+ * ports so that the stack alignment required by the target architecture is maintained.
+ * The kernel will call vApplicationGet*TaskMemory() to allow the application to create
+ * and return memory buffers for the TCB and stack. The idle task is run when a core
+ * runs out of scheduled work. It performs some housekeeping and can also trigger the
+ * user's vTaskIdleHook() if it is enabled.
  */
 
 void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
@@ -710,7 +746,6 @@ void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
                                    uint32_t *pulIdleTaskStackSize)
 {
     static StaticTask_t xIdleTaskTCB;
-    static StackType_t uxIdleTaskStack[configMINIMAL_STACK_SIZE];
 
     *ppxIdleTaskTCBBuffer = &xIdleTaskTCB;
     *ppxIdleTaskStackBuffer = uxIdleTaskStack;
@@ -722,11 +757,15 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
                                     uint32_t *pulTimerTaskStackSize)
 {
     static StaticTask_t xTimerTaskTCB;
-    static StackType_t uxTimerTaskStack[configMINIMAL_STACK_SIZE];
 
     *ppxTimerTaskTCBBuffer = &xTimerTaskTCB;
     *ppxTimerTaskStackBuffer = uxTimerTaskStack;
-    *pulTimerTaskStackSize = configMINIMAL_STACK_SIZE;
+    *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
+}
+
+void vApplicationDaemonTaskStartupHook(void)
+{
+    vAppInitModulesWithInterrupts();
 }
 
 /* ---------------------------------------------------------------------------------- *
@@ -769,15 +808,6 @@ static void vAppCreateTasks(AppContext_t *pxCtx)
     AppTasks_t *pxTasks = pxCtx->xTasks;
 
     configASSERT((pxRes != NULL) && (pxTasks != NULL));
-
-    pxTasks->xInitTask = xTaskCreateStatic(vInitTask,
-                                           "Init",
-                                           STACK_INIT,
-                                           (void *)pxCtx,
-                                           PRIO_INIT | portPRIVILEGE_BIT,
-                                           pxRes->xInitStack,
-                                           &pxRes->xInitTaskBuffer);
-    configASSERT(pxTasks->xInitTask != NULL);
 
     pxTasks->xCANTxTask = xTaskCreateStatic(vCANTxTask,
                                             "CANTx",
@@ -891,17 +921,6 @@ static void vAppCreateObjects(AppContext_t *pxCtx)
 }
 
 // Tasks ///////////////////////////////////////////////////////////////////////////////
-
-static portTASK_FUNCTION(vInitTask, pvParameters)
-{
-    (void)pvParameters;
-
-    /* Initialize modules that require interrupts */
-    vAppInitModulesWithInterrupts();
-
-    /* Delete self */
-    vTaskDelete(NULL);
-}
 
 static portTASK_FUNCTION(vCANTxTask, pvParameters)
 {
